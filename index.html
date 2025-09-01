@@ -13,59 +13,63 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            background-image: url('power-lines-4758957.svg'); /* 여기에 이미지 파일명을 넣으세요. */
+            background-image: url('power-lines-4758957.svg');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            background-color: #ce0018;
+            background-color: #ce0018; /* 배경 이미지가 없는 경우를 대비한 대체 색상 */
         }
         .container {
             width: 90%;
-            max-width: 200px;
-            padding: 1px;
-            border-radius: 1px;
+            max-width: 300px; /* 컨테이너 폭을 조금 넓혔습니다 */
+            padding: 20px;
+            border-radius: 8px;
+            background-color: rgba(0, 0, 0, 0.6);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             text-align: center;
         }
-        #nameInput, #ageInput, #linkInput {
-            width: 50%;
+        .input-fields-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        /* 작은 입력란들: 이름, 나이, 학년, 성별 */
+        #nameInput, #ageInput, .grade-area, .gender-area {
+            flex-basis: 15%;
+            flex-grow: 1;
+        }
+        /* 큰 입력란들: 링크, 소원 */
+        #linkInput, #answerInput {
+            width: 100%;
+            flex-grow: 1;
+        }
+        input, select {
+            width: 100%;
             padding: 5px;
             margin-bottom: 10px;
             border-radius: 1px;
             box-sizing: border-box;
             font-size: 10px;
             height: 25px;
+            background-color: rgba(255, 255, 255, 0.8);
+            color: #000;
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
-        #nameInput:focus, #ageInput:focus, #linkInput:focus {
+        input:focus, select:focus {
             outline: none;
-        }
-        select {
-            width: 50%;
-            padding: 5px;
-            margin-bottom: 10px;
-            border-radius: 1px;
-            box-sizing: border-box;
-            font-size: 10px;
-            height: 25px;
-        }
-        select:focus {
-            outline: none;
+            border-color: #ce0018;
         }
         .input-group {
             display: flex;
             align-items: center;
             gap: 10px;
+            width: 100%;
         }
         #answerInput {
             flex-grow: 1;
-            padding: 5px;
-            border-radius: 1px;
-            box-sizing: border-box;
-            font-size: 10px;
-            resize: none;
-        }
-        #answerInput:focus {
-            outline: none;
         }
         button {
             background-color: #ce0018;
@@ -82,15 +86,15 @@
         .hidden {
             display: none;
         }
-        /* 완료 메시지 스타일 수정 */
+        /* 완료 메시지 스타일 */
         #completionMessage {
             color: #ce0018;
             font-size: 7px;
-            text-align: center; /* 가운데 정렬 추가 */
+            text-align: center;
         }
         /* 로딩 스피너 스타일 */
         .loader {
-            border: 4px solid #000;
+            border: 4px solid #f3f3f3;
             border-top: 4px solid #ce0018;
             border-radius: 50%;
             width: 15px;
@@ -103,40 +107,46 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* REC 문구 스타일 */
+       #rec-footer {
+        color: #000;
+        font-size: 30px;
+        font-family: 'Malgun Gothic', 'Apple Gothic', sans-serif; /* 굵은 고딕체로 변경 */
+        margin-top: 5px;
+        font-weight: bold;
+        width: 100%;
+        text-align: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div id="inputSection">
             <div class="input-area">
-                <div class="name-area">
-                    <input type="text" id="nameInput" placeholder="당신의 이름은...">
-                </div>
-                <div class="age-area">
+                <div class="input-fields-container">
+                    <input type="text" id="nameInput" placeholder="이름">
                     <input type="number" id="ageInput" placeholder="나이" min="1" max="100">
-                </div>
-                <div class="grade-area">
-                    <select id="gradeInput">
-                        <option value="">학년</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                    </select>
-                </div>
-                <div class="gender-area">
-                    <select id="genderInput">
-                        <option value="">성별</option>
-                        <option value="男">男</option>
-                        <option value="女">女</option>
-                    </select>
-                </div>
-                <div class="link-area">
+                    <div class="grade-area">
+                        <select id="gradeInput">
+                            <option value="">학년</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                    </div>
+                    <div class="gender-area">
+                        <select id="genderInput">
+                            <option value="">성별</option>
+                            <option value="男">男</option>
+                            <option value="女">女</option>
+                        </select>
+                    </div>
                     <input type="text" id="linkInput" placeholder="학적사항링크">
-                </div>
-                <div class="input-group">
-                    <input type="text" id="answerInput" placeholder="당신의 소원은...">
-                    <button id="submitButton" onclick="saveAnswer()">enter</button>
+                    <div class="input-group">
+                        <input type="text" id="answerInput" placeholder="당신의 소원은...">
+                        <button id="submitButton" onclick="saveAnswer()">enter</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -145,6 +155,8 @@
         <div id="completionMessage" class="hidden">
             <h1>접수되었습니다.</h1>
         </div>
+        
+        <div id="rec-footer">R.E.C</div>
     </div>
     <script>
         const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxImt0Ud5JrHpNXV3UDscqL4VmnZB3Ou3bTFspBAthPBQwFPZ1mDxOGOmuyM6E_Wz9B/exec";
@@ -213,11 +225,10 @@
                 console.error('Error:', error);
                 alert('네트워크 오류가 발생했습니다.');
                 loadingMessage.style.display = 'none';
-                    submitButton.disabled = false;
-                    inputSection.classList.remove('hidden');
+                submitButton.disabled = false;
+                inputSection.classList.remove('hidden');
             }
         }
     </script>
 </body>
 </html>
-
