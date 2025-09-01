@@ -80,11 +80,10 @@
             display: none;
         }
         #successMessage {
-            text-align: center;
+            display: none;
         }
         .centered-message {
-            color: #ce0018;
-            font-size: 0.5em;
+            display: none;
         }
         #wishCountDisplay {
             color: #ce0018;
@@ -105,50 +104,86 @@
                 </div>
                 <div class="input-group">
                     <input type="text" id="answerInput" placeholder="당신의 소원은...">
-                    <button onclick="saveAnswer()">enter</button>
+                    <button id="submitButton" onclick="saveAnswer()">enter</button>
                 </div>
             </div>
         </div>
+        
         <div id="successMessage" class="hidden">
             <h1 class="centered-message">소원이 접수되었습니다.</h1>
         </div>
+        
         <div id="wishCountDisplay">총 0개의 소원이 접수되었습니다.</div>
     </div>
     <script>
-        function updateWishCount() {
-            const answers = JSON.parse(localStorage.getItem('answers')) || [];
-            const count = answers.length;
-            document.getElementById('wishCountDisplay').textContent = `총 ${count}개의 소원이 접수되었습니다.`;
+        // 여기에 Apps Script에서 복사한 웹 앱 URL을 붙여넣으세요.
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx4KuLIUg_bCO6Yn22VH3hzroXgkIx6RHStukKTfA2OEPq0NTLmZZ2cH71IhxerW83v/exec";
+
+        async function updateWishCount() {
+            try {
+                const response = await fetch(WEB_APP_URL + "?action=getWishes");
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const wishes = await response.json();
+                const count = wishes.length;
+                document.getElementById('wishCountDisplay').textContent = `총 ${count}개의 소원이 접수되었습니다.`;
+            } catch (error) {
+                console.error('Error fetching wish count:', error);
+                document.getElementById('wishCountDisplay').textContent = `총 0개의 소원이 접수되었습니다.`;
+            }
         }
+
         document.addEventListener('keypress', function(event) {
             if (event.key === 'Enter') {
                 saveAnswer();
             }
         });
-        function saveAnswer() {
+
+        async function saveAnswer() {
+            const submitButton = document.getElementById('submitButton');
+            submitButton.disabled = true;
+
             const nameInput = document.getElementById('nameInput');
             const linkInput = document.getElementById('linkInput');
             const answerInput = document.getElementById('answerInput');
             const inputSection = document.getElementById('inputSection');
-            const successMessage = document.getElementById('successMessage');
             const nameText = nameInput.value.trim();
             const linkText = linkInput.value.trim();
             const answerText = answerInput.value.trim();
+            
             if (answerText === '' || nameText === '') {
                 alert('이름과 소원을 모두 입력해주세요!');
+                submitButton.disabled = false;
                 return;
             }
-            const answers = JSON.parse(localStorage.getItem('answers')) || [];
-            const entry = { name: nameText, link: linkText, wish: answerText };
-            answers.push(entry);
-            localStorage.setItem('answers', JSON.stringify(answers));
-            updateWishCount();
-            inputSection.classList.add('hidden');
-            successMessage.classList.remove('hidden');
-            setTimeout(() => {
-                successMessage.classList.add('hidden');
-            }, 3000);
+
+            try {
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'addWish',
+                        name: nameText,
+                        link: linkText,
+                        wish: answerText
+                    })
+                });
+                const data = await response.json();
+
+                if (data.result === 'success') {
+                    inputSection.classList.add('hidden');
+                    updateWishCount(); 
+                } else {
+                    alert('소원 저장에 실패했습니다.');
+                    submitButton.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('네트워크 오류가 발생했습니다.');
+                submitButton.disabled = false;
+            }
         }
+        
         window.onload = function() {
             updateWishCount();
         };
