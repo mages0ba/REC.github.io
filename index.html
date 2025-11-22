@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>레트로 데스크톱 (최종)</title>
+    
+    <style>
+        /* === 바탕화면 및 기본 설정 === */
+        body {
+            margin: 0;
+            font-family: 'Tahoma', 'MS Sans Serif', '돋움', sans-serif;
+            background-color: #008080;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        
+        #desktop-wrapper {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 30px);
+        }
+
+        .desktop-logo-watermark {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: -1; opacity: 0.6; image-rendering: pixelated; width: 300px;
+        }
+
+        /* === 아이콘 스타일 === */
+        .desktop-icon-container {
+            position: absolute; display: flex; flex-direction: column; align-items: center;
+            text-align: center; width: 80px; padding: 5px 0; cursor: pointer; color: white;
+            text-shadow: 1px 1px 0px black, -1px -1px 0px black, 1px -1px 0px black, -1px 1px 0px black;
+        }
+        .desktop-icon-container:hover {
+            background-color: rgba(0, 0, 128, 0.5); outline: 1px dotted rgba(255, 255, 255, 0.7);
+        }
+        .desktop-icon-container img {
+            width: 48px; height: 48px; margin-bottom: 5px; image-rendering: pixelated;
+        }
+        .desktop-icon-container span { font-size: 13px; word-break: break-all; }
+
+        /* === 윈도우 팝업 공통 === */
+        .window-frame {
+            border: 2px outset #dfdfdf; background-color: #c0c0c0;
+            box-shadow: 5px 5px 10px rgba(0,0,0,0.5); display: none;
+            position: absolute; z-index: 1000; min-width: 250px; min-height: 150px;
+        }
+        
+        /* 팝업 위치 및 크기 */
+        #rec-popup { width: 800px; top: 5%; left: 10%; height: 600px; }
+        #team-project-popup { width: 600px; top: 10%; left: 15%; height: 700px; }
+        #report-popup { width: 450px; top: 30%; left: 45%; height: 400px; }
+        #mail-popup { width: 650px; top: 20%; left: 20%; height: 480px; }
+        #folder-popup { width: 600px; top: 15%; left: 35%; height: 700px; }
+        #computer-popup { width: 700px; top: 10%; left: 35%; height: 450px; }
+        #recycle-popup { width: 400px; top: 20%; left: 65%; height: 200px; }
+        #video-player-popup { width: 480px; top: 25%; left: 25%; height: 360px; }
+        #application-popup { width: 400px; top: 15%; left: 50%; height: 550px; }
+
+        .title-bar {
+            background-color: #000080; color: white; padding: 4px 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-weight: bold; cursor: move; 
+        }
+        .title-bar-buttons .win-button {
+            background-color: #c0c0c0; color: black; border: 2px outset #dfdfdf;
+            width: 20px; height: 20px; padding: 0; margin-left: 2px;
+            font-weight: bold; cursor: pointer; line-height: 1; font-size: 14px;
+        }
+        .title-bar-buttons .win-button:active, .title-bar-buttons .win-button.close:active { border-style: inset; }
+        
+        .window-body {
+            padding: 10px; background-color: white; border-top: 2px solid #dfdfdf;
+            height: calc(100% - 20px - 28px); box-sizing: border-box; overflow: auto;
+        }
+        .window-body.text-only {
+            padding: 20px; font-size: 14px; line-height: 1.6;
+            height: calc(100% - 40px - 28px);
+        }
+        
+        /* 크기 조절 핸들 */
+        .resize-handle { position: absolute; z-index: 99; }
+        .resize-handle-n { top: 0; left: 8px; right: 8px; height: 5px; cursor: n-resize; }
+        .resize-handle-s { bottom: 0; left: 8px; right: 8px; height: 5px; cursor: s-resize; }
+        .resize-handle-e { top: 8px; bottom: 8px; right: 0; width: 5px; cursor: e-resize; }
+        .resize-handle-w { top: 8px; bottom: 8px; left: 0; width: 5px; cursor: w-resize; }
+        .resize-handle-ne { top: 0; right: 0; width: 8px; height: 8px; cursor: ne-resize; }
+        .resize-handle-nw { top: 0; left: 0; width: 8px; height: 8px; cursor: nw-resize; }
+        .resize-handle-se { bottom: 0; right: 0; width: 8px; height: 8px; cursor: se-resize; }
+        .resize-handle-sw { bottom: 0; left: 0; width: 8px; height: 8px; cursor: sw-resize; }
+        
+        .window-frame.maximized { top: 0 !important; left: 0 !important; width: 100% !important; height: calc(100vh - 30px) !important; border: none; box-shadow: none; }
+        .window-frame.maximized .window-body { height: calc(100% - 28px); }
+        .window-frame.maximized .resize-handle { display: none; }
+
+        /* === 작업 표시줄 === */
+        .taskbar {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 30px;
+            background-color: #c0c0c0; border-top: 2px outset #dfdfdf;
+            display: flex; align-items: center; padding: 2px; box-sizing: border-box; z-index: 999;
+        }
+        .start-button {
+            background-color: #c0c0c0; border: 2px outset #dfdfdf;
+            padding: 2px 8px; font-weight: bold; display: flex;
+            align-items: center; margin-left: 5px; cursor: pointer;
+        }
+        .start-button:active { border-style: inset; }
+        .start-button img { width: 20px; height: 20px; margin-right: 5px; image-rendering: pixelated; }
+        .task-tabs { display: flex; height: 100%; margin-left: 10px; overflow: hidden; }
+        .task-tab-item {
+            background-color: #c0c0c0; border: 2px outset #dfdfdf; padding: 2px 10px; margin-right: 2px;
+            font-size: 13px; max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; height: 100%; box-sizing: border-box; cursor: pointer;
+        }
+        .task-tab-item:active { border-style: inset; }
+        .taskbar-clock {
+            margin-left: auto; background-color: #dfdfdf; border: 2px inset #808080; padding: 2px 8px;
+            font-size: 13px; height: 100%; display: flex; align-items: center; box-sizing: border-box;
+        }
+
+        /* === 메일 스타일 === */
+        #mail-popup .window-body { padding: 0; display: flex; flexDirection: row; height: calc(100% - 28px); }
+        .mail-sidebar { width: 130px; background-color: #fff; border-right: 2px inset #808080; padding: 10px 5px; flex-shrink: 0; }
+        .mail-folder { display: block; padding: 6px 10px; cursor: pointer; font-size: 13px; color: #333; margin-bottom: 2px; }
+        .mail-folder:hover { background-color: #000080; color: white; }
+        .mail-folder.active { background-color: #000080; color: white; font-weight: bold; }
+        .mail-main-area { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .mail-list-pane { background-color: white; border-bottom: 2px inset #808080; height: 160px; overflow-y: auto; }
+        .mail-list-item { display: flex; justify-content: space-between; padding: 5px 8px; border-bottom: 1px solid #c0c0c0; cursor: pointer; font-size: 13px; }
+        .mail-list-item:hover, .mail-list-item.active { background-color: #000080; color: white; }
+        .mail-list-item .mail-from { width: 110px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mail-list-item .mail-subject { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
+        .mail-list-item .mail-date { width: 60px; text-align: right; color: #555; font-size: 12px; }
+        .mail-preview-pane { background-color: white; flex-grow: 1; padding: 15px; overflow-y: auto; line-height: 1.5; }
+        .mail-content { display: none; } .mail-content.active { display: block; } 
+        .mail-preview-pane hr { border: none; border-top: 1px solid #c0c0c0; margin: 10px 0; }
+        .mailbox-container { display: none; } .mailbox-container.active { display: block; }
+
+        /* === R.E.C 탭 스타일 === */
+        .tab-bar { display: flex; margin-top: 5px; }
+        .tab-link { background-color: #c0c0c0; border: 2px outset #dfdfdf; padding: 8px 12px; cursor: pointer; margin-right: 2px; position: relative; bottom: -2px; }
+        .tab-link.active { background-color: white; border-bottom-color: white; z-index: 2; }
+        .tab-content-area { position: relative; z-index: 1; }
+        .tab-content { display: none; background-color: white; padding: 10px; border: 2px inset #808080; min-height: 120px; overflow: auto; }
+        .tab-content.active { display: block; } .tab-content h3 { margin-top: 0; }
+        
+        .notice-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .notice-box { background-color: #f0f0f0; border: 2px inset #808080; padding: 10px; min-height: 60px; }
+        .notice-box h4 { margin-top: 0; margin-bottom: 5px; font-size: 14px; }
+        .notice-box p { font-size: 12px; line-height: 1.4; margin-bottom: 0; }
+
+        /* === 파일 탐색기 스타일 === */
+        #computer-popup .window-body { padding: 0; display: flex; flex-direction: column; height: calc(100% - 28px); }
+        .file-explorer-toolbar { background-color: #c0c0c0; border-bottom: 1px solid #808080; padding: 4px; flex-shrink: 0; }
+        .file-explorer-container { display: flex; flex-grow: 1; height: 100%; background: white; }
+        .nav-pane { width: 150px; flex-shrink: 0; background-color: white; border: 2px inset #808080; border-top: none; overflow-y: auto; }
+        .nav-item { padding: 8px 10px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #dfdfdf; display: flex; align-items: center; }
+        .nav-item:hover, .nav-item.active { background-color: #000080; color: white; }
+        .nav-item img { width: 20px; height: 20px; margin-right: 8px; }
+        .content-pane { flex-grow: 1; background-color: white; border: 2px inset #808080; border-top: none; border-left: none; overflow-y: auto; padding: 10px; }
+        .folder-content { display: none; flex-wrap: wrap; align-content: flex-start; }
+        .folder-content.active { display: flex; }
+        
+        /* 파일 아이콘 스타일 */
+        .file-item { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            width: 140px;
+            margin: 5px; 
+            padding: 5px; 
+            text-align: center; 
+            cursor: pointer; 
+        }
+        .file-item video, .file-item img { 
+            width: 120px; 
+            height: 68px; 
+            margin-bottom: 5px; 
+            object-fit: contain; /* 이미지 비율 유지 */
+        }
+        .file-item span { font-size: 12px; word-break: break-all; line-height: 1.2; height: 2.4em; overflow: hidden; }
+        .file-item:hover { background-color: #000080; color: white; }
+        
+        /* === PDF 뷰어 스타일 === */
+        #team-project-popup .window-body { padding: 0; display: flex; flex-direction: column; height: calc(100% - 28px); background-color: #777777; }
+        .pdf-toolbar { background-color: #c0c0c0; border-bottom: 1px solid #808080; padding: 4px; flex-shrink: 0; display: flex; align-items: center; }
+        .pdf-toolbar .win-button { background-color: #c0c0c0; border: 2px outset #dfdfdf; padding: 2px 5px; cursor: pointer; margin-right: 2px; }
+        .pdf-toolbar .win-button:active { border-style: inset; }
+        .pdf-content-area { flex-grow: 1; overflow: auto; padding: 20px; }
+        .pdf-page { background-color: white; border: 1px solid #000; box-shadow: 3px 3px 8px rgba(0,0,0,0.5); padding: 20px; margin: 0 auto; width: 450px; height: 636px; font-size: 14px; line-height: 1.6; }
+        
+        /* === Word 스타일 === */
+        #folder-popup .window-body { padding: 0; display: flex; flex-direction: column; height: calc(100% - 28px); background-color: #808080; }
+        .word-toolbar, .word-formatting-bar { background-color: #c0c0c0; border-bottom: 1px solid #808080; padding: 4px; flex-shrink: 0; }
+        .word-formatting-bar { display: flex; align-items: center; }
+        .word-content-area { flex-grow: 1; overflow: auto; padding: 20px; }
+        .word-page { background-color: white; border: 1px solid #000; box-shadow: 3px 3px 8px rgba(0,0,0,0.5); padding: 30px; margin: 0 auto; width: 450px; height: 636px; font-size: 14px; line-height: 1.6; }
+        
+        /* === 비디오 플레이어 스타일 === */
+        .video-player-body { padding: 0; background-color: #000; height: calc(100% - 28px); display: flex; align-items: center; justify-content: center; }
+        .video-player-body video { width: 100%; height: 100%; }
+
+        /* === R.E.C 팝업 (구글 문서용) 스타일 === */
+        #rec-popup .window-body { padding: 0; overflow: hidden; }
+
+        /* === 신청서 접수 팝업 스타일 === */
+        .application-window-body {
+            padding: 0; height: calc(100% - 28px);
+            background-image: url('power-lines-4758957.svg'); background-size: cover; background-position: center;
+            background-repeat: no-repeat; background-color: #ce0018; 
+            display: flex; justify-content: center; align-items: center; color: black;
+        }
+        .app-container {
+            width: 90%; max-width: 320px; padding: 20px; border-radius: 8px;
+            background-color: rgba(0, 0, 0, 0.6); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); text-align: center;
+        }
+        .app-input-fields-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        .app-container input, .app-container select {
+            width: 100%; padding: 5px; margin-bottom: 10px; border-radius: 1px; box-sizing: border-box;
+            font-size: 12px; height: 30px; background-color: rgba(255, 255, 255, 0.8); color: #000;
+            border: 1px solid rgba(255, 255, 255, 0.3); font-family: 굴림, serif;
+        }
+        .app-container input:focus, .app-container select:focus { outline: none; border-color: #ce0018; }
+        #nameInput, #ageInput { flex: 1 1 40%; }
+        .grade-area, .gender-area { flex: 1 1 40%; }
+        #linkInput, #answerInput { width: 100%; }
+        .app-input-group { display: flex; align-items: center; gap: 10px; width: 100%; }
+        #answerInput { flex-grow: 1; margin-bottom: 0;}
+        .app-container button {
+            background-color: #ce0018; color: white; padding: 5px 10px; border: none; border-radius: 1px;
+            cursor: pointer; font-size: 12px; height: 30px; font-family: 굴림, serif;
+        }
+        .app-container button:hover { color: #000; }
+        .hidden { display: none; }
+        #completionMessage { color: #ce0018; font-size: 12px; text-align: center; }
+        .loader {
+            border: 4px solid #f3f3f3; border-top: 4px solid #ce0018; border-radius: 50%;
+            width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; margin: 20px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div id="desktop-wrapper">
+        <img src="image/windows_logo.png" class="desktop-logo-watermark" alt="Windows Logo">
+
+        <div id="rec-icon" class="desktop-icon-container" style="top: 20px; left: 20px;" onclick="openPopup('rec-popup')">
+            <img src="image/favicon.png" alt="R.E.C">
+            <span>R.E.C</span>
+        </div>
+
+        <div class="desktop-icon-container" style="top: 220px; left: 20px;" onclick="openPopup('report-popup')">
+            <img src="image/file.png" alt="Report">
+            <span>경제학 레포트</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 20px; left: calc(100% - 100px);" onclick="openPopup('computer-popup')">
+            <img src="image/folder.png" alt="My Computer">
+            <span>내 컴퓨터</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 120px; left: calc(100% - 100px);" onclick="openPopup('recycle-popup')">
+            <img src="https://placehold.co/48x48/808080/FFFFFF?text=Bin" alt="Recycle Bin"><span>휴지통</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 320px; left: 20px;" onclick="openPopup('mail-popup')">
+            <img src="image/mailicon.png" alt="Mail"><span>메일</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 120px; left: 20px;" onclick="openPopup('team-project-popup')">
+            <img src="image/file.png">
+            <span>촬영 계획서.pdf</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 20px; left: 120px;" onclick="openPopup('folder-popup')">
+            <img src="image/file.png" alt="Doc">
+            <span>중간고사_자료.doc</span>
+        </div>
+        
+        <div id="application-icon" class="desktop-icon-container" style="top: 220px; left: 120px;" onclick="openPopup('application-popup')">
+            <img src="https://placehold.co/48x48/CE0018/FFFFFF?text=Form" alt="Application">
+            <span>신청서 접수</span>
+        </div>
+    </div>
+
+    <div id="rec-popup" class="window-frame">
+        <div class="title-bar">
+            <span class="title-text">R.E.C - Google Docs</span>
+            <div class="title-bar-buttons">
+                <button class="win-button" onclick="minimizePopup(this)">_</button>
+                <button class="win-button" onclick="maximizePopup(this)">□</button>
+                <button class="win-button close" onclick="closePopup(this)">X</button>
+            </div>
+        </div>
+        <div class="window-body">
+            <iframe src="https://docs.google.com/document/d/1AXNITwsO6CC0Q6Mv3QVdQszf7UhkUGMI5M38hKuc0Hg/preview" 
+                    style="width: 100%; height: 100%; border: none;">
+            </iframe>
+        </div>
+    </div>
+
+    <div id="application-popup" class="window-frame">
+        <div class="title-bar">
+            <span class="title-text">신청서 접수</span>
+            <div class="title-bar-buttons">
+                <button class="win-button" onclick="minimizePopup(this)">_</button>
+                <button class="win-button" onclick="maximizePopup(this)">□</button>
+                <button class="win-button close" onclick="closePopup(this)">X</button>
+            </div>
+        </div>
+        <div class="window-body application-window-body">
+            <div class="app-container">
+                <div id="inputSection">
+                    <div class="input-area">
+                        <div class="app-input-fields-container">
+                            <input type="text" id="nameInput" placeholder="이름">
+                            <input type="number" id="ageInput" placeholder="나이" min="1" max="100">
+                            <div class="grade-area">
+                                <select id="gradeInput">
+                                    <option value="">학년</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                </select>
+                            </div>
+                            <div class="gender-area">
+                                <select id="genderInput">
+                                    <option value="">성별</option>
+                                    <option value="男">男</option>
+                                    <option value="女">女</option>
+                                </select>
+                            </div>
+                            <input type="text" id="linkInput" placeholder="학적사항링크">
+                            <div class="app-input-group">
+                                <input type="text" id="answerInput" placeholder="당신의 소원은...">
+                                <button id="submitButton" onclick="saveAnswer()">enter</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="loadingMessage" class="loader"></div>
+                <div id="completionMessage" class="hidden"><h1>접수되었습니다.</h1></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="team-project-popup" class="window-frame">
+        <div class="title-bar">
+            <span class="title-text">촬영 계획서_단편영화_그림자.pdf</span>
+            <div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div>
+        </div>
+        <div class="window-body">
+            <div class="pdf-toolbar"><button class="win-button">&lt;</button><button class="win-button">&gt;</button><span>1 / 3</span><button class="win-button">-</button><button class="win-button">+</button></div>
+            <div class="pdf-content-area">
+                <div class="pdf-page">
+                    <h3>[영상 촬영 계획서] - 단편영화 '전선'</h3>
+                    <hr>
+                    <h4>1. 개요</h4>
+                    <p><b>장르:</b> 미스터리 스릴러<br>
+                    <b>러닝타임:</b> 10분 내외<br>
+                    <b>로그라인:</b> 인간의 시냅스는 전선과 같다. 감각을 컴퓨터에 연결해본다면, 어떻게 될까?</p>
+                    
+                    <h4>2. 촬영 일정</h4>
+                    <ul>
+                        <li><b>날짜:</b> 2025년 11월 24일 (일요일)</li>
+                        <li><b>시간:</b> 10:00 ~ 18:00 (총 8시간)</li>
+                        <li><b>집합:</b> 학교 정문 앞 09:30</li>
+                    </ul>
+
+                    <h4>3. 로케이션</h4>
+                    <ul>
+                        <li><b>씬 #1~#3:</b> 인문대 옥상 (허가 완료)</li>
+                        <li><b>씬 #4~#7:</b> 동아리방 (302호)</li>
+                        <li><b>씬 #8:</b> 학교 뒤편 산책로</li>
+                    </ul>
+
+                    <h4>4. 장비 체크리스트</h4>
+                    <p>- 카메라: Sony A7M3 (렌즈 24-70mm, 50mm)<br>
+                    - 음향: 붐 마이크, 녹음기 (Zoom H1n)<br>
+                    - 조명: LED 패널 2개, 반사판<br>
+                    - 기타: 삼각대, 짐벌, 여분 배터리 4개</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="report-popup" class="window-frame">
+        <div class="title-bar">
+            <span class="title-text">경제학 레포트.hwp</span>
+            <div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div>
+        </div>
+        <div class="window-body text-only">
+            <p><b>주제:</b> 화면 연출이 소비자의 지각된 가치(Perceived Value)에 미치는 영향 분석</p>
+            <p><b>서론:</b> 전통적인 경제학은 재화의 객관적 가치에 주목하지만, 현대 미디어 환경에서 소비자의 선택은 시각적 '신호(signal)'에 크게 좌우된다. 본 보고서는 영상 동아리 활동 경험을 바탕으로, 화면 연출(미장센, 구도)이 경제적 신호로 작동하여 소비자의 지각된 가치에 영향을 미치는 과정을 분석한다.</p>
+            <p><b>본론:</b></p>
+            <ol>
+                <li><b>미장센(Mise-en-scène)과 경제적 신호:</b> 조명, 의상, 소품 등을 통해 인물의 사회경제적 지위를 암시, 이는 제품(혹은 인물)의 가치를 시각적으로 전달한다.</li>
+                <li><b>샷의 '비용'과 '효과':</b> 롱테이크나 대규모 엑스트라를 동원한 샷은 높은 '생산 비용'을 암시하며, 이는 콘텐츠의 '품질'로 인식된다. 반면, 클로즈업은 저비용 고효율의 감정적 전달 수단이다.</li>
+                <li><b>주의 경제(Attention Economy)에서의 시선 유도:</b> 3분할, 황금 비율, 리딩 라인 등은 관객의 한정된 '주의'라는 자원을 가장 중요한 정보(예: 상품 로고)로 유도하는 경제적 행위이다.</li>
+            </ol>
+            <p><b>결론:</b> 화면 연출은 단순한 예술적 선택이 아닌, 제한된 시간과 스크린 공간 안에서 최대의 설득 효과를 얻으려는 고도의 경제적 전략이다.</p>
+        </div>
+    </div>
+
+    <div id="mail-popup" class="window-frame">
+        <div class="title-bar">
+            <span class="title-text">메일 - Outlook Express</span>
+            <div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div>
+        </div>
+        <div class="window-body">
+            <div class="mail-sidebar">
+                <div class="mail-folder active" onclick="switchMailbox('inbox', this)">받은 편지함 (6)</div>
+                <div class="mail-folder" onclick="switchMailbox('sent', this)">보낸 편지함 (1)</div>
+                <div class="mail-folder">지운 편지함</div>
+                <div class="mail-folder">임시 보관함</div>
+            </div>
+            
+            <div class="mail-main-area">
+                <div id="mailbox-inbox" class="mailbox-container active">
+                    <div class="mail-list-pane">
+                        <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-1')"><span class="mail-from">교수님</span><span class="mail-subject">영상학개론 과제 피드백입니다.</span><span class="mail-date">오늘</span></div>
+                        <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-2')"><span class="mail-from">김철수(동기)</span><span class="mail-subject">야 이번 주말 동아리 회식 올거지?</span><span class="mail-date">어제</span></div>
+                        <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-3')"><span class="mail-from">(광고)카메라세상</span><span class="mail-subject">[특가] 소니 렌즈 최대 30% 할인!</span><span class="mail-date">11/20</span></div>
+                        <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-4')"><span class="mail-from">학과사무실</span><span class="mail-subject">다음 주 강의실 변경 안내 (302호 -> 405호)</span><span class="mail-date">11/19</span></div>
+                        <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-5')"><span class="mail-from">이영희</span><span class="mail-subject">편집본 파일 좀 보내줄 수 있어?</span><span class="mail-date">11/18</span></div>
+                        <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-6')"><span class="mail-from">(광고)알바천국</span><span class="mail-subject">단기 영상 편집 알바 구합니다.</span><span class="mail-date">11/15</span></div>
+                    </div>
+                </div>
+
+                <div id="mailbox-sent" class="mailbox-container">
+                    <div class="mail-list-pane">
+                        <div class="mail-list-item" onclick="openMail(event, 'mail-sent-1')"><span class="mail-from">나</span><span class="mail-subject">REC 서비스 재개 관련 문의드립니다.</span><span class="mail-date">11/21</span></div>
+                    </div>
+                </div>
+
+                <div class="mail-preview-pane">
+                    <div id="mail-inbox-1" class="mail-content"><p><b>보낸 사람:</b> 박교수님</p><p>제출한 과제 잘 보았다. 시각적 연출은 훌륭하나 경제학적 이론 적용이 조금 빈약하더구나.<br>첨부한 코멘트 확인하고 수정해서 다시 제출하도록.</p></div>
+                    <div id="mail-inbox-2" class="mail-content"><p><b>보낸 사람:</b> 김철수</p><p>이번주 토요일 6시에 학교 앞 고기집에서 모이기로 했어.<br>너 요즘 바쁜 건 아는데 꼭 와라! 신입생들도 온대.</p></div>
+                    <div id="mail-inbox-3" class="mail-content"><p><b>보낸 사람:</b> 카메라세상</p><p>블랙프라이데이 얼리버드 세일!<br>GM 렌즈군 한정 수량 특가 진행 중입니다. 놓치지 마세요.</p></div>
+                    <div id="mail-inbox-4" class="mail-content"><p><b>보낸 사람:</b> 학과사무실</p><p>영상학개론 수업 강의실이 난방 공사로 인해 변경되었습니다.<br>착오 없으시기 바랍니다.</p></div>
+                    <div id="mail-inbox-5" class="mail-content"><p><b>보낸 사람:</b> 이영희</p><p>저번에 찍은 거 컷편집 대충 된 거라도 혹시 볼 수 있을까?<br>색보정 톤 좀 미리 잡아보고 싶어서.</p></div>
+                    <div id="mail-inbox-6" class="mail-content"><p><b>보낸 사람:</b> 알바천국</p><p>유튜버 편집자 구인 공고가 등록되었습니다.<br>건당 15만원, 자막 작업 포함...</p></div>
+
+                    <div id="mail-sent-1" class="mail-content">
+                        <p><b>받는 사람:</b> admin@rec.com</p>
+                        <p><b>제목:</b> REC 서비스 재개 관련 문의드립니다.</p>
+                        <hr>
+                        <p>안녕하세요, REC 서비스 애용자입니다.</p>
+                        <p>최근 서비스 점검으로 인해 접속이 불가능한데, 정확히 언제쯤 서비스가 재개되는지 알 수 있을까요?</p>
+                        <p>동아리 활동 기록을 백업해야 해서 급하게 문의드립니다.</p>
+                        <p>답변 기다리겠습니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="folder-popup" class="window-frame">
+        <div class="title-bar">
+            <span class="title-text">중간고사_자료.doc - Microsoft Word</span>
+            <div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div>
+        </div>
+        <div class="window-body">
+            <div class="word-toolbar"><button class="win-button">Save</button><button class="win-button">Print</button></div>
+            <div class="word-formatting-bar"><select><option>Tahoma</option></select><button class="win-button"><b>B</b></button></div>
+            <div class="word-content-area">
+                <div class="word-page">
+                    <p><b>[파일 목록]</b></p>
+                    <ul>
+                        <li>경제학원론_핵심정리.docx</li>
+                        <li>미적분학_연습문제_풀이.pdf</li>
+                        <li>세계사_연표.xlsx</li>
+                    </ul>
+                    <p>중간고사 준비를 위한 자료들이 들어있는 폴더입니다.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="recycle-popup" class="window-frame">
+        <div class="title-bar"><span class="title-text">휴지통</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+        <div class="window-body text-only"><p>휴지통이 비어 있습니다.</p></div>
+    </div>
+
+    <div id="computer-popup" class="window-frame">
+        <div class="title-bar"><span class="title-text">내 컴퓨터</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+        <div class="window-body">
+            <div class="file-explorer-toolbar"><span>주소: 내 컴퓨터</span></div>
+            <div class="file-explorer-container">
+                <div class="nav-pane">
+                    <div class="nav-item" onclick="showFolderContent(event, 'content-view-docs')"><img src="image/folder.png"><span>문서</span></div>
+                    <div class="nav-item" onclick="showFolderContent(event, 'content-view-pics')"><img src="image/folder.png"><span>사진</span></div>
+                    <div class="nav-item" onclick="showFolderContent(event, 'content-view-vids')"><img src="image/folder.png"><span>동영상</span></div>
+                    <div class="nav-item" onclick="showFolderContent(event, 'content-view-bg')"><img src="image/folder.png"><span>배경화면</span></div>
+                </div>
+                <div class="content-pane">
+                    <div id="content-view-docs" class="folder-content">
+                        <div class="file-item"><img src="image/file.png"><span>경제학_레포트.hwp</span></div>
+                        <div class="file-item"><img src="image/file.png"><span>아이디어_메모.txt</span></div>
+                    </div>
+                    <div id="content-view-pics" class="folder-content">
+                        <div class="file-item"><img src="image/file.png"><span>여행_001.jpg</span></div>
+                        <div class="file-item"><img src="image/file.png"><span>고양이.jpg</span></div>
+                    </div>
+                    <div id="content-view-vids" class="folder-content">
+                        <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>badapple!.mp4</span></div>
+                        <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>동아리홍보.mp4</span></div>
+                        <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>촬영본.mov</span></div>
+                        <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>편집본.mp4</span></div>
+                    </div>
+                    <div id="content-view-bg" class="folder-content">
+                        <div class="file-item"><img src="image/file.png"><span>기본배경.bmp</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="video-player-popup" class="window-frame">
+        <div class="title-bar"><span class="title-text">비디오 재생</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+        <div class="window-body video-player-body"><video id="video-player-src" controls autoplay muted>브라우저가 비디오 태그를 지원하지 않습니다.</video></div>
+    </div>
+
+    
+    <div class="taskbar">
+        <button class="start-button"><img src="image/home.png" alt="Start">Start</button>
+        <div class="task-tabs" id="task-tabs"></div>
+        <div class="taskbar-clock" id="live-clock"></div>
+    </div>
+
+
+    <script>
+        let activeZIndex = 1000;
+
+        // --- 팝업 열기 ---
+        function openPopup(popupId) {
+            const popup = document.getElementById(popupId);
+            if (!popup) return;
+            const minimizedTab = document.querySelector(`.task-tab-item[data-popup-id="${popupId}"]`);
+            if (minimizedTab) { minimizedTab.click(); return; }
+            if (popup.style.display === 'block') { popup.style.zIndex = ++activeZIndex; return; }
+            
+            popup.style.display = 'block';
+            popup.style.zIndex = ++activeZIndex;
+            
+            // 팝업별 초기화 (내 컴퓨터 등)
+            if (popupId === 'mail-popup') {
+                // 기본적으로 받은편지함 보기
+                switchMailbox('inbox', document.querySelector('.mail-folder'));
+            }
+            if (popupId === 'computer-popup') {
+                const firstNavItem = popup.querySelector('.nav-item');
+                if (firstNavItem && !popup.querySelector('.nav-item.active')) firstNavItem.click();
+            }
+        }
+
+        // --- ⭐️ D-Day 기능 (과거 날짜 설정 = 즉시 표시) ---
+        function checkRevealTime() {
+            const now = new Date();
+
+            // 2024년 1월 1일로 설정하여 현재 시점(2024년 이후)에는 무조건 보이게 함
+            const appTargetDate = new Date('2024-01-01T00:00:00'); 
+            const appIcon = document.getElementById('application-icon');
+            if (now >= appTargetDate) {
+                if (appIcon.style.display === 'none') appIcon.style.display = 'flex';
+            } else {
+                appIcon.style.display = 'none';
+            }
+
+            const recTargetDate = new Date('2024-01-01T00:00:00');
+            const recIcon = document.getElementById('rec-icon');
+            if (now >= recTargetDate) {
+                if (recIcon.style.display === 'none') recIcon.style.display = 'flex';
+            } else {
+                recIcon.style.display = 'none';
+            }
+        }
+
+        // --- 메일함 전환 함수 ---
+        function switchMailbox(boxType, folderElement) {
+            const popup = document.getElementById('mail-popup');
+            
+            // 1. 사이드바 활성화 표시
+            const folders = popup.querySelectorAll('.mail-folder');
+            folders.forEach(f => f.classList.remove('active'));
+            if(folderElement) folderElement.classList.add('active');
+
+            // 2. 메일 리스트 전환
+            const inboxes = popup.querySelectorAll('.mailbox-container');
+            inboxes.forEach(box => box.classList.remove('active'));
+            document.getElementById('mailbox-' + boxType).classList.add('active');
+
+            // 3. 미리보기 내용 초기화
+            const contents = popup.querySelectorAll('.mail-content');
+            contents.forEach(c => c.classList.remove('active'));
+            
+            const items = popup.querySelectorAll('.mail-list-item');
+            items.forEach(i => i.classList.remove('active'));
+        }
+
+        // --- 메일 클릭 (리스트 -> 본문) ---
+        function openMail(evt, mailId) {
+            const currentPopup = evt.currentTarget.closest('.window-frame');
+            
+            // 현재 활성화된 메일함 내의 아이템들만 active 해제 (혹은 전체 해제도 무방)
+            const mailItems = currentPopup.querySelectorAll('.mail-list-item');
+            mailItems.forEach(item => item.classList.remove('active'));
+            
+            // 본문 모두 숨김
+            const mailContents = currentPopup.querySelectorAll('.mail-content');
+            mailContents.forEach(content => content.classList.remove('active'));
+            
+            // 선택 활성화
+            evt.currentTarget.classList.add('active');
+            document.getElementById(mailId).classList.add('active');
+        }
+
+        // --- 신청서 제출 로직 ---
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxImt0Ud5JrHpNXV3UDscqL4VmnZB3Ou3bTFspBAthPBQwFPZ1mDxOGOmuyM6E_Wz9B/exec";
+
+        async function saveAnswer() {
+            const submitButton = document.getElementById('submitButton');
+            const nameInput = document.getElementById('nameInput');
+            const ageInput = document.getElementById('ageInput');
+            const gradeInput = document.getElementById('gradeInput');
+            const genderInput = document.getElementById('genderInput');
+            const linkInput = document.getElementById('linkInput');
+            const answerInput = document.getElementById('answerInput');
+            const inputSection = document.getElementById('inputSection');
+            const loadingMessage = document.getElementById('loadingMessage');
+            const completionMessage = document.getElementById('completionMessage');
+
+            if (!answerInput.value.trim() || !nameInput.value.trim()) {
+                alert('정보를 모두 입력해주세요!');
+                return;
+            }
+
+            submitButton.disabled = true;
+            inputSection.classList.add('hidden');
+            loadingMessage.style.display = 'block';
+
+            try {
+                await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        action: 'addWish', 
+                        name: nameInput.value.trim(), 
+                        age: ageInput.value.trim(), 
+                        grade: gradeInput.value, 
+                        gender: genderInput.value, 
+                        link: linkInput.value.trim(), 
+                        wish: answerInput.value.trim() 
+                    })
+                });
+                loadingMessage.style.display = 'none';
+                completionMessage.classList.remove('hidden');
+            } catch (error) {
+                loadingMessage.style.display = 'none';
+                completionMessage.classList.remove('hidden');
+            }
+        }
+
+        // --- 파일 뷰어 ---
+        function openFileViewer(popupId, filePath) {
+            openPopup(popupId);
+            const popup = document.getElementById(popupId);
+            if (!popup) return;
+            const videoElement = popup.querySelector('video');
+            if (videoElement) {
+                videoElement.src = filePath;
+                videoElement.load(); 
+                videoElement.play(); 
+                const titleElement = popup.querySelector('.title-text');
+                if (titleElement) titleElement.textContent = filePath.split('/').pop();
+            }
+        }
+
+        // --- 팝업 닫기 ---
+        function closePopup(buttonElement) {
+            const popup = buttonElement.closest('.window-frame');
+            if (!popup) return;
+            popup.style.display = 'none';
+            const mediaElement = popup.querySelector('video, audio');
+            if (mediaElement) { mediaElement.pause(); mediaElement.src = ''; }
+            const popupId = popup.id;
+            const minimizedTab = document.querySelector(`.task-tab-item[data-popup-id="${popupId}"]`);
+            if (minimizedTab) minimizedTab.remove();
+        }
+
+        // --- 최소화/최대화 ---
+        function minimizePopup(buttonElement) {
+            const popup = buttonElement.closest('.window-frame');
+            if (!popup) return;
+            const mediaElement = popup.querySelector('video, audio');
+            if (mediaElement) mediaElement.pause();
+            const popupId = popup.id;
+            const title = popup.querySelector('.title-text').textContent;
+            const existingTab = document.querySelector(`.task-tab-item[data-popup-id="${popupId}"]`);
+            if (existingTab) return;
+            popup.style.display = 'none';
+            const tab = document.createElement('button');
+            tab.className = 'task-tab-item';
+            tab.textContent = title;
+            tab.dataset.popupId = popupId;
+            tab.addEventListener('click', () => {
+                popup.style.display = 'block';
+                popup.style.zIndex = ++activeZIndex;
+                tab.remove();
+            });
+            document.getElementById('task-tabs').appendChild(tab);
+        }
+        function maximizePopup(buttonElement) {
+            const popup = buttonElement.closest('.window-frame');
+            if (!popup) return;
+            popup.classList.toggle('maximized');
+        }
+
+        // --- 탭 전환 ---
+        function openTab(evt, docName) {
+            const currentTabArea = evt.currentTarget.closest('.window-body');
+            const tabcontents = currentTabArea.querySelectorAll(".tab-content");
+            tabcontents.forEach(tc => tc.classList.remove("active"));
+            const tablinks = currentTabArea.querySelectorAll(".tab-link");
+            tablinks.forEach(tl => tl.classList.remove("active"));
+            document.getElementById(docName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+
+        // --- 폴더 탐색 ---
+        function showFolderContent(event, contentId) {
+            const clickedItem = event.currentTarget;
+            const popup = clickedItem.closest('.window-frame');
+            const navItems = popup.querySelectorAll('.nav-item');
+            navItems.forEach(item => item.classList.remove('active'));
+            clickedItem.classList.add('active');
+            const contentPanes = popup.querySelectorAll('.folder-content');
+            contentPanes.forEach(pane => pane.classList.remove('active'));
+            const targetContent = document.getElementById(contentId);
+            if(targetContent) targetContent.classList.add('active');
+        }
+
+        // --- 시계 ---
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            document.getElementById('live-clock').textContent = timeString;
+        }
+
+        // --- 드래그 & 리사이즈 ---
+        function makeDraggable(windowElement) {
+            const titleBar = windowElement.querySelector('.title-bar');
+            if (!titleBar) return;
+            let isDragging = false;
+            titleBar.addEventListener('mousedown', (e) => {
+                windowElement.style.zIndex = ++activeZIndex;
+                if (e.target.classList.contains('win-button')) return;
+                if (windowElement.classList.contains('maximized')) return;
+                isDragging = true;
+                const offsetX = e.clientX - windowElement.getBoundingClientRect().left;
+                const offsetY = e.clientY - windowElement.getBoundingClientRect().top;
+                function dragMove(e) {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    let newLeft = e.clientX - offsetX;
+                    let newTop = e.clientY - offsetY;
+                    windowElement.style.left = newLeft + 'px';
+                    windowElement.style.top = newTop + 'px';
+                }
+                function dragEnd() {
+                    isDragging = false;
+                    document.removeEventListener('mousemove', dragMove);
+                    document.removeEventListener('mouseup', dragEnd);
+                }
+                document.addEventListener('mousemove', dragMove);
+                document.addEventListener('mouseup', dragEnd);
+            });
+        }
+        
+        function makeResizable(windowElement) {
+            const handles = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+            handles.forEach(handle => {
+                const grip = document.createElement('div');
+                grip.className = `resize-handle resize-handle-${handle}`;
+                windowElement.appendChild(grip);
+                grip.addEventListener('mousedown', (e) => { initResize(e, handle); });
+            });
+
+            let isResizing = false;
+            let currentHandle = '';
+            let initialX, initialY, initialWidth, initialHeight, initialTop, initialLeft;
+
+            function initResize(e, handle) {
+                if (windowElement.classList.contains('maximized')) return;
+                e.preventDefault(); e.stopPropagation(); 
+                windowElement.style.zIndex = ++activeZIndex;
+                isResizing = true;
+                currentHandle = handle;
+                initialX = e.clientX; initialY = e.clientY;
+                initialWidth = windowElement.offsetWidth; initialHeight = windowElement.offsetHeight;
+                initialTop = windowElement.offsetTop; initialLeft = windowElement.offsetLeft;
+                document.addEventListener('mousemove', doResize);
+                document.addEventListener('mouseup', stopResize);
+            }
+
+            function doResize(e) {
+                if (!isResizing) return;
+                const deltaX = e.clientX - initialX;
+                const deltaY = e.clientY - initialY;
+                let newWidth = initialWidth; let newHeight = initialHeight;
+                let newTop = initialTop; let newLeft = initialLeft;
+
+                if (currentHandle.includes('n')) { newHeight = initialHeight - deltaY; newTop = initialTop + deltaY; }
+                if (currentHandle.includes('s')) { newHeight = initialHeight + deltaY; }
+                if (currentHandle.includes('w')) { newWidth = initialWidth - deltaX; newLeft = initialLeft + deltaX; }
+                if (currentHandle.includes('e')) { newWidth = initialWidth + deltaX; }
+                
+                if (newWidth >= 250) { windowElement.style.width = newWidth + 'px'; windowElement.style.left = newLeft + 'px'; }
+                if (newHeight >= 150) { windowElement.style.height = newHeight + 'px'; windowElement.style.top = newTop + 'px'; }
+            }
+
+            function stopResize() {
+                isResizing = false;
+                document.removeEventListener('mousemove', doResize);
+                document.removeEventListener('mouseup', stopResize);
+            }
+        }
+        
+        document.addEventListener("DOMContentLoaded", function() {
+            updateClock();
+            setInterval(updateClock, 1000);
+
+            // D-Day 체크 (1초마다)
+            checkRevealTime();
+            setInterval(checkRevealTime, 1000);
+            
+            document.querySelectorAll('.window-frame').forEach(popup => {
+                popup.style.display = 'none';
+                makeDraggable(popup);
+                makeResizable(popup);
+                popup.addEventListener('mousedown', () => {
+                    popup.style.zIndex = ++activeZIndex;
+                });
+            });
+        });
+    </script>
+</body>
+</html>
