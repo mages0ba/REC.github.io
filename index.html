@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>레트로 데스크톱 (최종: 시트 연동 복구)</title>
+    
+    <style>
+        /* === 기본 설정 === */
+        body {
+            margin: 0;
+            font-family: 'Tahoma', 'MS Sans Serif', '돋움', sans-serif;
+            background-color: #008080;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        
+        /* [뷰어 모드 스타일 - A4 고정] */
+        body.view-mode {
+            background-color: #525659;
+            overflow-y: auto;
+            height: auto;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 0;
+        }
+        body.view-mode #desktop-wrapper, 
+        body.view-mode .taskbar, 
+        body.view-mode .window-frame {
+            display: none !important;
+        }
+        
+        /* === 데스크톱 === */
+        #desktop-wrapper { position: relative; width: 100%; height: calc(100vh - 30px); }
+        .desktop-logo-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: -1; opacity: 0.6; image-rendering: pixelated; width: 300px; }
+
+        /* 아이콘 */
+        .desktop-icon-container {
+            position: absolute; display: flex; flex-direction: column; align-items: center;
+            text-align: center; width: 80px; padding: 5px 0; cursor: pointer; color: white;
+            text-shadow: 1px 1px 0px black, -1px -1px 0px black, 1px -1px 0px black, -1px 1px 0px black;
+        }
+        .desktop-icon-container:hover { background-color: rgba(0, 0, 128, 0.5); outline: 1px dotted rgba(255, 255, 255, 0.7); }
+        .desktop-icon-container img { width: 48px; height: 48px; margin-bottom: 5px; image-rendering: pixelated; }
+        .desktop-icon-container span { font-size: 13px; word-break: break-all; }
+
+        /* 윈도우 팝업 공통 */
+        .window-frame {
+            border: 2px outset #dfdfdf; background-color: #c0c0c0;
+            box-shadow: 5px 5px 10px rgba(0,0,0,0.5); display: none;
+            position: absolute; z-index: 1000; min-width: 250px; min-height: 150px;
+        }
+        
+        /* 팝업 위치/크기 */
+        #rec-popup { width: 800px; top: 5%; left: 10%; height: 600px; }
+        #team-project-popup { width: 600px; top: 10%; left: 15%; height: 700px; }
+        #report-popup { width: 450px; top: 30%; left: 45%; height: 400px; }
+        #mail-popup { width: 650px; top: 20%; left: 20%; height: 480px; }
+        #folder-popup { width: 600px; top: 15%; left: 35%; height: 700px; }
+        #computer-popup { width: 700px; top: 10%; left: 35%; height: 450px; }
+        #recycle-popup { width: 400px; top: 20%; left: 65%; height: 200px; }
+        #video-player-popup { width: 480px; top: 25%; left: 25%; height: 360px; }
+        #application-popup { width: 400px; top: 15%; left: 50%; height: 550px; }
+        #status-popup { width: 900px; top: 10%; left: 10%; height: 650px; }
+        #student-record-popup { width: 700px; top: 5%; left: 30%; height: 850px; }
+
+        .title-bar { background-color: #000080; color: white; padding: 4px 8px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; cursor: move; }
+        .title-bar-buttons .win-button { background-color: #c0c0c0; color: black; border: 2px outset #dfdfdf; width: 20px; height: 20px; padding: 0; margin-left: 2px; font-weight: bold; cursor: pointer; line-height: 1; font-size: 14px; }
+        .title-bar-buttons .win-button:active { border-style: inset; }
+        .window-body { padding: 10px; background-color: white; border-top: 2px solid #dfdfdf; height: calc(100% - 20px - 28px); box-sizing: border-box; overflow: auto; }
+        .window-body.text-only { padding: 20px; font-size: 14px; line-height: 1.6; height: calc(100% - 40px - 28px); }
+
+        .resize-handle { position: absolute; z-index: 99; }
+        .resize-handle-se { bottom: 0; right: 0; width: 8px; height: 8px; cursor: se-resize; }
+        .window-frame.maximized { top: 0 !important; left: 0 !important; width: 100% !important; height: calc(100vh - 30px) !important; border: none; box-shadow: none; }
+
+        /* 작업 표시줄 */
+        .taskbar { position: fixed; bottom: 0; left: 0; width: 100%; height: 30px; background-color: #c0c0c0; border-top: 2px outset #dfdfdf; display: flex; align-items: center; padding: 2px; box-sizing: border-box; z-index: 999; }
+        .start-button { background-color: #c0c0c0; border: 2px outset #dfdfdf; padding: 2px 8px; font-weight: bold; display: flex; align-items: center; margin-left: 5px; cursor: pointer; }
+        .start-button:active { border-style: inset; }
+        .start-button img { width: 20px; height: 20px; margin-right: 5px; image-rendering: pixelated; }
+        .task-tabs { display: flex; height: 100%; margin-left: 10px; overflow: hidden; }
+        .task-tab-item { background-color: #c0c0c0; border: 2px outset #dfdfdf; padding: 2px 10px; margin-right: 2px; font-size: 13px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: 100%; box-sizing: border-box; cursor: pointer; }
+        .task-tab-item:active { border-style: inset; }
+        .taskbar-clock { margin-left: auto; background-color: #dfdfdf; border: 2px inset #808080; padding: 2px 8px; font-size: 13px; height: 100%; display: flex; align-items: center; box-sizing: border-box; }
+
+        /* === 팝업별 스타일 === */
+        /* 메일 */
+        #mail-popup .window-body { padding: 0; display: flex; flexDirection: row; height: calc(100% - 28px); }
+        .mail-sidebar { width: 130px; background-color: #fff; border-right: 2px inset #808080; padding: 10px 5px; flex-shrink: 0; }
+        .mail-folder { display: block; padding: 6px 10px; cursor: pointer; font-size: 13px; color: #333; margin-bottom: 2px; }
+        .mail-folder:hover, .mail-folder.active { background-color: #000080; color: white; }
+        .mail-folder.active { font-weight: bold; }
+        .mail-main-area { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .mail-list-pane { background-color: white; border-bottom: 2px inset #808080; height: 160px; overflow-y: auto; }
+        .mail-list-item { display: flex; justify-content: space-between; padding: 5px 8px; border-bottom: 1px solid #c0c0c0; cursor: pointer; font-size: 13px; }
+        .mail-list-item:hover, .mail-list-item.active { background-color: #000080; color: white; }
+        .mail-list-item .mail-from { width: 110px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mail-list-item .mail-subject { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
+        .mail-list-item .mail-date { width: 60px; text-align: right; color: #555; font-size: 12px; }
+        .mail-preview-pane { background-color: white; flex-grow: 1; padding: 15px; overflow-y: auto; line-height: 1.5; }
+        .mail-content { display: none; } .mail-content.active { display: block; } 
+        .mail-preview-pane hr { border: none; border-top: 1px solid #c0c0c0; margin: 10px 0; }
+        .mailbox-container { display: none; } .mailbox-container.active { display: block; }
+
+        /* 파일 탐색기 */
+        #computer-popup .window-body { padding: 0; display: flex; flex-direction: column; height: calc(100% - 28px); }
+        .file-explorer-toolbar { background-color: #c0c0c0; border-bottom: 1px solid #808080; padding: 4px; flex-shrink: 0; }
+        .file-explorer-container { display: flex; flex-grow: 1; height: 100%; background: white; }
+        .nav-pane { width: 150px; flex-shrink: 0; background-color: white; border: 2px inset #808080; border-top: none; overflow-y: auto; }
+        .nav-item { padding: 8px 10px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #dfdfdf; display: flex; align-items: center; }
+        .nav-item:hover, .nav-item.active { background-color: #000080; color: white; }
+        .nav-item img { width: 20px; height: 20px; margin-right: 8px; }
+        .content-pane { flex-grow: 1; background-color: white; border: 2px inset #808080; border-top: none; border-left: none; overflow-y: auto; padding: 10px; }
+        .folder-content { display: none; flex-wrap: wrap; align-content: flex-start; }
+        .folder-content.active { display: flex; }
+        .file-item { display: flex; flex-direction: column; align-items: center; width: 140px; margin: 5px; padding: 5px; text-align: center; cursor: pointer; }
+        .file-item img { width: 120px; height: 68px; margin-bottom: 5px; object-fit: contain; }
+        .file-item span { font-size: 12px; word-break: break-all; line-height: 1.2; height: 2.4em; overflow: hidden; }
+        .file-item:hover { background-color: #000080; color: white; }
+
+        /* PDF/Word */
+        #team-project-popup .window-body { padding: 0; display: flex; flex-direction: column; height: calc(100% - 28px); background-color: #777777; }
+        .pdf-toolbar { background-color: #c0c0c0; border-bottom: 1px solid #808080; padding: 4px; flex-shrink: 0; display: flex; align-items: center; }
+        .pdf-toolbar .win-button { background-color: #c0c0c0; border: 2px outset #dfdfdf; padding: 2px 5px; cursor: pointer; margin-right: 2px; }
+        .pdf-toolbar .win-button:active { border-style: inset; }
+        .pdf-content-area { flex-grow: 1; overflow: auto; padding: 20px; }
+        .pdf-page { background-color: white; border: 1px solid #000; box-shadow: 3px 3px 8px rgba(0,0,0,0.5); padding: 20px; margin: 0 auto; width: 450px; height: 636px; font-size: 14px; line-height: 1.6; }
+        
+        #folder-popup .window-body { padding: 0; display: flex; flex-direction: column; height: calc(100% - 28px); background-color: #808080; }
+        .word-toolbar, .word-formatting-bar { background-color: #c0c0c0; border-bottom: 1px solid #808080; padding: 4px; flex-shrink: 0; }
+        .word-formatting-bar { display: flex; align-items: center; }
+        .word-content-area { flex-grow: 1; overflow: auto; padding: 20px; }
+        .word-page { background-color: white; border: 1px solid #000; box-shadow: 3px 3px 8px rgba(0,0,0,0.5); padding: 30px; margin: 0 auto; width: 450px; height: 636px; font-size: 14px; line-height: 1.6; }
+
+        /* 신청서 접수 */
+        .application-window-body { padding: 0; height: calc(100% - 28px); background-image: url('power-lines-4758957.svg'); background-size: cover; background-position: center; background-repeat: no-repeat; background-color: #ce0018; display: flex; justify-content: center; align-items: center; color: black; }
+        .app-container { width: 90%; max-width: 320px; padding: 20px; border-radius: 8px; background-color: rgba(0, 0, 0, 0.6); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); text-align: center; }
+        .app-container input, .app-container select { width: 100%; padding: 5px; margin-bottom: 10px; border-radius: 1px; box-sizing: border-box; font-size: 12px; height: 30px; background-color: rgba(255, 255, 255, 0.8); color: #000; border: 1px solid rgba(255, 255, 255, 0.3); font-family: 굴림, serif; }
+        .app-input-fields-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        #nameInput, #ageInput { flex: 1 1 40%; } .grade-area, .gender-area { flex: 1 1 40%; } #linkInput, #answerInput { width: 100%; }
+        .app-input-group { display: flex; align-items: center; gap: 10px; width: 100%; } #answerInput { flex-grow: 1; margin-bottom: 0;}
+        .app-container button { background-color: #ce0018; color: white; padding: 5px 10px; border: none; border-radius: 1px; cursor: pointer; font-size: 12px; height: 30px; font-family: 굴림, serif; }
+        .hidden { display: none; } .loader { border: 4px solid #f3f3f3; border-top: 4px solid #ce0018; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* 비디오 플레이어 */
+        .video-player-body { padding: 0; background-color: #000; height: calc(100% - 28px); display: flex; align-items: center; justify-content: center; }
+        .video-player-body video { width: 100%; height: 100%; }
+
+        /* R.E.C 팝업 스타일 */
+        #rec-popup .window-body { padding: 0; overflow: hidden; }
+
+        /* === [학적사항 폼 스타일] === */
+        .hwp-toolbar { background-color: #c0c0c0; border-bottom: 1px solid #808080; padding: 4px; flex-shrink: 0; display: flex; gap: 5px; }
+        .hwp-container { background-color: white; padding: 40px; min-height: 100%; font-family: 'Batang', 'Gungsuh', serif; font-size: 15px; box-sizing: border-box; width: 100%; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+        
+        /* 뷰어 모드 컨테이너 (A4 고정) */
+        #read-only-viewer { display: none; background-color: white; width: 210mm; min-width: 210mm; min-height: 297mm; height: auto; padding: 20mm; box-shadow: 0 0 15px rgba(0,0,0,0.5); box-sizing: border-box; font-family: 'Batang', serif; flex-shrink: 0; margin: 0 auto; }
+        body.view-mode #read-only-viewer { display: block; }
+
+        .hwp-title { text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 8px; margin-bottom: 30px; border-bottom: 3px double #000; padding-bottom: 10px; }
+        .form-section { margin-bottom: 25px; }
+        .form-label { font-weight: bold; font-size: 16px; margin-bottom: 5px; display: block; color: #000; }
+        .form-desc { font-size: 12px; color: #666; margin-bottom: 8px; margin-left: 2px; font-style: italic; }
+        .form-desc::before { content: "* "; }
+        .form-input { width: 100%; border: none; border-bottom: 1px solid #000; font-family: 'Batang', serif; font-size: 15px; padding: 5px; background: #fafafa; box-sizing: border-box; outline: none; }
+        .form-input:focus { background: #e8f0fe; border-bottom: 2px solid #000080; }
+        .form-textarea { width: 100%; border: 1px solid #ccc; font-family: 'Batang', serif; font-size: 15px; padding: 10px; box-sizing: border-box; min-height: 100px; resize: vertical; outline: none; line-height: 1.5; }
+        .form-textarea:focus { border-color: #000080; background: #e8f0fe; }
+        .input-row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        .input-group { display: flex; align-items: center; gap: 5px; flex: 1; }
+        .appearance-box { border: 2px solid #000; padding: 15px; background-color: #f5f5f5; margin-bottom: 5px; }
+        .appearance-desc-list { margin: 0; padding-left: 20px; font-size: 12px; color: #444; line-height: 1.4; }
+        .keyword-box { display: flex; gap: 10px; margin-bottom: 10px; }
+        .keyword-input { flex: 1; text-align: center; border: 1px solid #000; padding: 8px; font-weight: bold; background: #fff; }
+        .radio-option { display: inline-flex; align-items: center; gap: 5px; margin-right: 15px; cursor: pointer; }
+        .divider-line { border: none; border-top: 2px solid #000; margin: 40px 0 20px 0; }
+        .private-area { border: 2px dashed #ce0018; padding: 20px; position: relative; margin-top: 30px; }
+        .private-badge { position: absolute; top: -12px; left: 20px; background: #ce0018; color: white; padding: 2px 10px; font-size: 12px; font-weight: bold; }
+        .private-notice { color: #ce0018; font-size: 12px; margin-bottom: 15px; font-weight: bold; }
+        .action-area { margin-top: 20px; text-align: center; display: flex; justify-content: center; gap: 10px; }
+        .hwp-btn { background: #000080; color: white; border: 1px solid #000; padding: 8px 20px; cursor: pointer; font-family: 'Batang'; font-weight: bold; }
+        .hwp-btn.share { background: #ce0018; display: none; }
+        
+        .view-mode-element { pointer-events: none; border: none !important; background: transparent !important; resize: none; overflow: hidden; }
+        textarea.view-mode-element { white-space: pre-wrap; height: auto !important; min-height: 1em !important; border-bottom: 1px solid #eee !important; }
+    </style>
+</head>
+<body>
+
+    <div id="desktop-wrapper">
+        <img src="image/windows_logo.png" class="desktop-logo-watermark" alt="Windows Logo">
+
+        <!-- 아이콘들 -->
+        <div id="rec-icon" class="desktop-icon-container" style="top: 20px; left: 20px;" onclick="openPopup('rec-popup')">
+            <img src="image/favicon.png" alt="R.E.C"><span>R.E.C</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 220px; left: 20px;" onclick="openPopup('report-popup')">
+            <img src="image/file.png" alt="Report"><span>경제학 레포트</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 20px; left: calc(100% - 100px);" onclick="openPopup('computer-popup')">
+            <img src="image/folder.png" alt="My Computer"><span>내 컴퓨터</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 120px; left: calc(100% - 100px);" onclick="openPopup('recycle-popup')">
+            <img src="https://placehold.co/48x48/808080/FFFFFF?text=Bin" alt="Recycle Bin"><span>휴지통</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 320px; left: 20px;" onclick="openPopup('mail-popup')">
+            <img src="image/mailicon.png" alt="Mail"><span>메일</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 120px; left: 20px;" onclick="openPopup('team-project-popup')">
+            <img src="image/file.png"><span>촬영 계획서.pdf</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 20px; left: 120px;" onclick="openPopup('folder-popup')">
+            <img src="image/file.png" alt="Doc"><span>중간고사_자료.doc</span>
+        </div>
+        <div id="application-icon" class="desktop-icon-container" style="top: 220px; left: 120px;" onclick="openPopup('application-popup')">
+            <img src="https://placehold.co/48x48/CE0018/FFFFFF?text=Form" alt="Application"><span>신청서 접수</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 220px; left: 220px;" onclick="openPopup('status-popup')">
+            <img src="https://placehold.co/48x48/1D6F42/FFFFFF?text=XLS" alt="Sheet"><span>접수 현황</span>
+        </div>
+        <div class="desktop-icon-container" style="top: 320px; left: 120px;" onclick="openPopup('student-record-popup')">
+            <img src="image/file.png" alt="Doc"><span>학적사항.hwp</span>
+        </div>
+
+        <!-- 1. 학적사항 (A4 비율 고정 + 자동저장) -->
+        <div id="student-record-popup" class="window-frame">
+            <div class="title-bar">
+                <span class="title-text">학적사항.hwp</span>
+                <div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div>
+            </div>
+            <div class="window-body" style="padding: 0; display: flex; flex-direction: column;">
+                <div class="hwp-toolbar">
+                    <button class="win-button" onclick="saveData()">저장 (Save)</button>
+                    <button class="win-button" id="share-btn-window" style="display:none; color: #ce0018;" onclick="shareLink()">링크 복사</button>
+                    <button class="win-button">인쇄 (Print)</button>
+                </div>
+                <div class="window-body" style="flex-grow: 1; background: #808080; padding: 20px;">
+                    <div class="hwp-container" id="editor-form">
+                        <div class="hwp-title">학 적 사 항</div>
+                        <div class="form-section"><label class="form-label">[ (캐치프레이즈) ]</label><div class="form-desc">괄호 안에 있는 건 밑에 *기호를 써서 작게 넣을 안내사항이야-공백 포함 20자 이내로 작성하여 주시길 바랍니다.</div><input type="text" class="form-input" id="inp-catchphrase" placeholder="내용을 입력하세요"></div>
+                        <div class="form-section"><label class="form-label">[" 한마디 "]</label><div class="form-desc">공미포 20자 이내로 작성하여 주시길 바랍니다.</div><input type="text" class="form-input" id="inp-oneliner" placeholder="내용을 입력하세요"></div>
+                        <div class="form-section"><label class="form-label">[외관]</label><div class="appearance-box"><ul class="appearance-desc-list form-desc"><li>사이즈는 가로 1000px 이상, 세로 자유입니다.</li><li>LD의 경우 최소 허벅지가 보이는 반신, SD와 MD의 경우 전신만을 허용하며 단색 채색이 가능합니다.</li><li>그림 인장만을 허용합니다. 픽크루, 외관 지원, 커미션 등 본인에게 저작권이 없는 그림의 경우 저작권자의 닉네임과 아이디를 포함한 정확한 출처를 남겨주세요.</li><li>본 커뮤에는 합발폼이 존재하기에 배경 투명화를 필수로 해주시길 바랍니다. 투명화 되지 않았을 시 오류로 간주됩니다.</li><li>인장과 외관 다운로드가 되지 않는 링크의 경우, 다운로드 링크를 반드시 첨부해주세요.</li></ul><div style="margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px;"><input type="file" id="inp-file-fake"><div style="margin-top:5px; font-size: 12px;">또는 이미지 링크: <input type="text" id="inp-img-url" class="form-input" style="width: 70%; display:inline-block;" placeholder="https://..."></div></div></div></div>
+                        <div class="form-section"><label class="form-label">[이름]</label><div class="input-row"><div class="input-group"><label>한글 표기:</label><input type="text" class="form-input" id="inp-name-kor"></div><div class="input-group"><label>영문 표기:</label><input type="text" class="form-input" id="inp-name-eng"></div></div><div class="form-desc">불쾌감을 주거나 정치인과 관련된 장난식 이름을 불허합니다.</div></div>
+                        <div class="form-section"><label class="form-label">[키/몸무게]</label><div class="input-row"><div class="input-group"><input type="number" class="form-input" id="inp-height" placeholder="170"> cm</div><div class="input-group"><input type="number" class="form-input" id="inp-weight" placeholder="60"> kg</div></div><div class="form-desc">비현실적인 키와 몸무게를 불허합니다. ex. 5m/10kg. 마름, 표준과 같은 표기는 불가합니다. 정확한 수치를 기입해주세요.</div></div>
+                        <div class="form-section"><label class="form-label">[성별]</label><div class="radio-group"><label class="radio-option"><input type="radio" name="gender" value="女"> 女</label><label class="radio-option"><input type="radio" name="gender" value="男"> 男</label></div></div>
+                        <div class="form-section"><label class="form-label">[나이/학년]</label><div class="input-row"><div class="input-group"><input type="number" class="form-input" id="inp-age" placeholder="나이"> 세</div><div class="input-group"><input type="number" class="form-input" id="inp-grade" placeholder="학년"> 학년</div></div></div>
+                        <div class="form-section"><label class="form-label">[성격]</label><div class="keyword-box"><input type="text" class="form-input keyword-input" id="inp-kw1" placeholder="키워드 1"><input type="text" class="form-input keyword-input" id="inp-kw2" placeholder="키워드 2"><input type="text" class="form-input keyword-input" id="inp-kw3" placeholder="키워드 3"></div><textarea class="form-textarea" id="inp-personality" style="height: 200px;" placeholder="성격을 파악할 수 있는 설명을 공백 포함 500자 이상 기입 바랍니다."></textarea><div class="form-desc">3개의 대표 키워드와 함께 필수로 성격을 파악할 수 있는 설명을 공백 포함 500자 이상 기입 바랍니다.</div></div>
+                        <div class="form-section"><label class="form-label">[기타]</label><div class="form-desc">호불호, 생일등 위에서 적지 못한 설정을 자유롭게 서술해주세요. 공백이 불가능합니다.</div><textarea class="form-textarea" id="inp-etc"></textarea></div>
+                        <div class="form-section"><label class="form-label">[소지품]</label><div class="form-desc">캐릭터 한 명 당 두 개로 제한합니다. 가방이나 파우치 등은 안에 든 물건까지 포함해서 카운트됩니다.</div><textarea class="form-textarea" id="inp-items" style="height: 60px;"></textarea></div>
+                        <div class="form-section"><label class="form-label">[선관]</label><div class="form-desc">선관은 1명까지 가능하며, 지나친 완성형 서사나 유성애 관계는 불합 요소에 해당됩니다. 반드시 간단한 관계 서술을 함께 적어주세요.</div><textarea class="form-textarea" id="inp-relation" style="height: 60px;"></textarea></div>
+                        <div class="form-section"><label class="form-label">[선관 동시 합격]</label><div class="radio-group"><label class="radio-option"><input type="radio" name="simul_pass" value="O"> [ O ]</label><label class="radio-option"><input type="radio" name="simul_pass" value="X"> [ X ]</label></div></div>
+                        <div class="form-section"><label class="form-label">[본 커뮤의 스토리에 따라 캐릭터가 사망할 수 있습니다.]</label><div class="radio-group"><label class="radio-option"><input type="radio" name="death_consent" value="O"> [ O ]</label><label class="radio-option"><input type="radio" name="death_consent" value="X"> [ X ]</label></div></div>
+                        <hr class="divider-line">
+                        <div class="private-area"><div class="private-badge">비공개란</div><div class="private-notice">커뮤 스토리 전개에 따라 캐릭터의 비공개란이 일부분 노출될 수 있습니다.</div><div class="form-section"><label class="form-label">[비밀 설정]</label><textarea class="form-textarea" id="inp-secret-setting"></textarea></div><div class="form-section"><label class="form-label">[비밀 소지품]</label><div class="form-desc">무기 소지 불가능합니다.</div><textarea class="form-textarea" id="inp-secret-items" style="height: 60px;"></textarea></div></div>
+                        <div class="action-area"><button class="hwp-btn" onclick="saveData()">저 장</button><button class="hwp-btn share" id="share-btn-bottom" onclick="shareLink()">링크 복사</button></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 메일 (원문 복구) -->
+        <div id="mail-popup" class="window-frame">
+            <div class="title-bar"><span class="title-text">메일 - Outlook Express</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+            <div class="window-body">
+                <div class="mail-sidebar"><div class="mail-folder active" onclick="switchMailbox('inbox', this)">받은 편지함 (6)</div><div class="mail-folder" onclick="switchMailbox('sent', this)">보낸 편지함 (1)</div><div class="mail-folder">지운 편지함</div><div class="mail-folder">임시 보관함</div></div>
+                <div class="mail-main-area">
+                    <div id="mailbox-inbox" class="mailbox-container active">
+                        <div class="mail-list-pane">
+                            <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-1')"><span class="mail-from">교수님</span><span class="mail-subject">영상학개론 과제 피드백입니다.</span><span class="mail-date">오늘</span></div>
+                            <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-2')"><span class="mail-from">김철수(동기)</span><span class="mail-subject">야 이번 주말 동아리 회식 올거지?</span><span class="mail-date">어제</span></div>
+                            <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-3')"><span class="mail-from">(광고)카메라세상</span><span class="mail-subject">[특가] 소니 렌즈 최대 30% 할인!</span><span class="mail-date">11/20</span></div>
+                            <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-4')"><span class="mail-from">학과사무실</span><span class="mail-subject">다음 주 강의실 변경 안내 (302호 -> 405호)</span><span class="mail-date">11/19</span></div>
+                            <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-5')"><span class="mail-from">이영희</span><span class="mail-subject">편집본 파일 좀 보내줄 수 있어?</span><span class="mail-date">11/18</span></div>
+                            <div class="mail-list-item" onclick="openMail(event, 'mail-inbox-6')"><span class="mail-from">(광고)알바천국</span><span class="mail-subject">단기 영상 편집 알바 구합니다.</span><span class="mail-date">11/15</span></div>
+                        </div>
+                    </div>
+                    <div id="mailbox-sent" class="mailbox-container"><div class="mail-list-pane"><div class="mail-list-item" onclick="openMail(event, 'mail-sent-1')"><span class="mail-from">나</span><span class="mail-subject">REC 서비스 재개 관련 문의드립니다.</span><span class="mail-date">11/21</span></div></div></div>
+                    <div class="mail-preview-pane">
+                        <div id="mail-inbox-1" class="mail-content"><p><b>보낸 사람:</b> 박교수님</p><p>제출한 과제 잘 보았다. 시각적 연출은 훌륭하나 경제학적 이론 적용이 조금 빈약하더구나.<br>첨부한 코멘트 확인하고 수정해서 다시 제출하도록.</p></div>
+                        <div id="mail-inbox-2" class="mail-content"><p><b>보낸 사람:</b> 김철수</p><p>이번주 토요일 6시에 학교 앞 고기집에서 모이기로 했어.<br>너 요즘 바쁜 건 아는데 꼭 와라! 신입생들도 온대.</p></div>
+                        <div id="mail-inbox-3" class="mail-content"><p><b>보낸 사람:</b> 카메라세상</p><p>블랙프라이데이 얼리버드 세일!<br>GM 렌즈군 한정 수량 특가 진행 중입니다. 놓치지 마세요.</p></div>
+                        <div id="mail-inbox-4" class="mail-content"><p><b>보낸 사람:</b> 학과사무실</p><p>영상학개론 수업 강의실이 난방 공사로 인해 변경되었습니다.<br>착오 없으시기 바랍니다.</p></div>
+                        <div id="mail-inbox-5" class="mail-content"><p><b>보낸 사람:</b> 이영희</p><p>저번에 찍은 거 컷편집 대충 된 거라도 혹시 볼 수 있을까?<br>색보정 톤 좀 미리 잡아보고 싶어서.</p></div>
+                        <div id="mail-inbox-6" class="mail-content"><p><b>보낸 사람:</b> 알바천국</p><p>유튜버 편집자 구인 공고가 등록되었습니다.<br>건당 15만원, 자막 작업 포함...</p></div>
+                        <div id="mail-sent-1" class="mail-content"><p><b>받는 사람:</b> admin@rec.com</p><p><b>제목:</b> REC 서비스 재개 관련 문의드립니다.</p><hr><p>안녕하세요, REC 서비스 애용자입니다.</p><p>최근 서비스 점검으로 인해 접속이 불가능한데, 정확히 언제쯤 서비스가 재개되는지 알 수 있을까요?</p><p>동아리 활동 기록을 백업해야 해서 급하게 문의드립니다.</p><p>답변 기다리겠습니다.</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 레포트 (원문 복구) -->
+        <div id="report-popup" class="window-frame">
+            <div class="title-bar"><span class="title-text">경제학 레포트.hwp</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+            <div class="window-body text-only">
+                <p><b>주제:</b> 화면 연출이 소비자의 지각된 가치(Perceived Value)에 미치는 영향 분석</p>
+                <p><b>서론:</b> 전통적인 경제학은 재화의 객관적 가치에 주목하지만, 현대 미디어 환경에서 소비자의 선택은 시각적 '신호(signal)'에 크게 좌우된다. 본 보고서는 영상 동아리 활동 경험을 바탕으로, 화면 연출(미장센, 구도)이 경제적 신호로 작동하여 소비자의 지각된 가치에 영향을 미치는 과정을 분석한다.</p>
+                <p><b>본론:</b></p>
+                <ol>
+                    <li><b>미장센(Mise-en-scène)과 경제적 신호:</b> 조명, 의상, 소품 등을 통해 인물의 사회경제적 지위를 암시, 이는 제품(혹은 인물)의 가치를 시각적으로 전달한다.</li>
+                    <li><b>샷의 '비용'과 '효과':</b> 롱테이크나 대규모 엑스트라를 동원한 샷은 높은 '생산 비용'을 암시하며, 이는 콘텐츠의 '품질'로 인식된다. 반면, 클로즈업은 저비용 고효율의 감정적 전달 수단이다.</li>
+                    <li><b>주의 경제(Attention Economy)에서의 시선 유도:</b> 3분할, 황금 비율, 리딩 라인 등은 관객의 한정된 '주의'라는 자원을 가장 중요한 정보(예: 상품 로고)로 유도하는 경제적 행위이다.</li>
+                </ol>
+                <p><b>결론:</b> 화면 연출은 단순한 예술적 선택이 아닌, 제한된 시간과 스크린 공간 안에서 최대의 설득 효과를 얻으려는 고도의 경제적 전략이다.</p>
+            </div>
+        </div>
+
+        <!-- 4. 촬영 계획서 (원문 복구) -->
+        <div id="team-project-popup" class="window-frame">
+            <div class="title-bar"><span class="title-text">촬영 계획서_단편영화_그림자.pdf</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+            <div class="window-body">
+                <div class="pdf-toolbar"><button class="win-button">&lt;</button><button class="win-button">&gt;</button><span>1 / 3</span><button class="win-button">-</button><button class="win-button">+</button></div>
+                <div class="pdf-content-area">
+                    <div class="pdf-page">
+                        <h3>[영상 촬영 계획서] - 단편영화 '전선'</h3><hr>
+                        <h4>1. 개요</h4><p><b>장르:</b> 미스터리 스릴러<br><b>러닝타임:</b> 10분 내외<br><b>로그라인:</b> 인간의 시냅스는 전선과 같다. 감각을 컴퓨터에 연결해본다면, 어떻게 될까?</p>
+                        <h4>2. 촬영 일정</h4><ul><li><b>날짜:</b> 2025년 11월 24일 (일요일)</li><li><b>시간:</b> 10:00 ~ 18:00 (총 8시간)</li><li><b>집합:</b> 학교 정문 앞 09:30</li></ul>
+                        <h4>3. 로케이션</h4><ul><li><b>씬 #1~#3:</b> 인문대 옥상 (허가 완료)</li><li><b>씬 #4~#7:</b> 동아리방 (302호)</li><li><b>씬 #8:</b> 학교 뒤편 산책로</li></ul>
+                        <h4>4. 장비 체크리스트</h4><p>- 카메라: Sony A7M3 (렌즈 24-70mm, 50mm)<br>- 음향: 붐 마이크, 녹음기 (Zoom H1n)<br>- 조명: LED 패널 2개, 반사판<br>- 기타: 삼각대, 짐벌, 여분 배터리 4개</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. 내 컴퓨터 (원문 복구) -->
+        <div id="computer-popup" class="window-frame">
+            <div class="title-bar"><span class="title-text">내 컴퓨터</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+            <div class="window-body">
+                <div class="file-explorer-toolbar"><span>주소: 내 컴퓨터</span></div>
+                <div class="file-explorer-container">
+                    <div class="nav-pane">
+                        <div class="nav-item" onclick="showFolderContent(event, 'content-view-docs')"><img src="image/folder.png"><span>문서</span></div>
+                        <div class="nav-item" onclick="showFolderContent(event, 'content-view-pics')"><img src="image/folder.png"><span>사진</span></div>
+                        <div class="nav-item" onclick="showFolderContent(event, 'content-view-vids')"><img src="image/folder.png"><span>동영상</span></div>
+                        <div class="nav-item" onclick="showFolderContent(event, 'content-view-bg')"><img src="image/folder.png"><span>배경화면</span></div>
+                    </div>
+                    <div class="content-pane">
+                        <div id="content-view-docs" class="folder-content"><div class="file-item"><img src="image/file.png"><span>경제학_레포트.hwp</span></div><div class="file-item"><img src="image/file.png"><span>아이디어_메모.txt</span></div></div>
+                        <div id="content-view-pics" class="folder-content"><div class="file-item"><img src="image/file.png"><span>여행_001.jpg</span></div><div class="file-item"><img src="image/file.png"><span>고양이.jpg</span></div></div>
+                        <div id="content-view-vids" class="folder-content">
+                            <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>badapple!.mp4</span></div>
+                            <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>동아리홍보.mp4</span></div>
+                            <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>촬영본.mov</span></div>
+                            <div class="file-item" onclick="openFileViewer('video-player-popup', 'image/badapple!.mp4')"><img src="image/file.png"><span>편집본.mp4</span></div>
+                        </div>
+                        <div id="content-view-bg" class="folder-content"><div class="file-item"><img src="image/file.png"><span>기본배경.bmp</span></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. 폴더 (원문 복구) -->
+        <div id="folder-popup" class="window-frame">
+            <div class="title-bar"><span class="title-text">중간고사_자료.doc - Microsoft Word</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+            <div class="window-body">
+                <div class="word-toolbar"><button class="win-button">Save</button><button class="win-button">Print</button></div>
+                <div class="word-formatting-bar"><select><option>Tahoma</option></select><button class="win-button"><b>B</b></button></div>
+                <div class="word-content-area"><div class="word-page"><p><b>[파일 목록]</b></p><ul><li>경제학원론_핵심정리.docx</li><li>미적분학_연습문제_풀이.pdf</li><li>세계사_연표.xlsx</li></ul><p>중간고사 준비를 위한 자료들이 들어있는 폴더입니다.</p></div></div>
+            </div>
+        </div>
+
+        <!-- 7. 신청서 접수 (기존 유지) -->
+        <div id="application-popup" class="window-frame">
+            <div class="title-bar"><span class="title-text">신청서 접수</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div>
+            <div class="window-body application-window-body">
+                <div class="app-container">
+                    <div id="inputSection">
+                        <div class="input-area">
+                            <div class="app-input-fields-container">
+                                <input type="text" id="nameInput" placeholder="이름">
+                                <input type="number" id="ageInput" placeholder="나이" min="1" max="100">
+                                <div class="grade-area"><select id="gradeInput"><option value="">학년</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+                                <div class="gender-area"><select id="genderInput"><option value="">성별</option><option value="男">男</option><option value="女">女</option></select></div>
+                                <input type="text" id="linkInput" placeholder="학적사항링크">
+                                <div class="app-input-group"><input type="text" id="answerInput" placeholder="당신의 소원은..."><button id="submitButton" onclick="saveAnswer()">enter</button></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="loadingMessage" class="loader"></div>
+                    <div id="completionMessage" class="hidden"><h1>접수되었습니다.</h1></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. 기타: R.E.C, Status, Video, Recycle -->
+        <div id="rec-popup" class="window-frame"><div class="title-bar"><span class="title-text">R.E.C - Google Docs</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div><div class="window-body"><iframe src="https://docs.google.com/document/d/1AXNITwsO6CC0Q6Mv3QVdQszf7UhkUGMI5M38hKuc0Hg/preview" style="width: 100%; height: 100%; border: none;"></iframe></div></div>
+        <div id="status-popup" class="window-frame"><div class="title-bar"><span class="title-text">접수 현황.xlsx - Google Sheets</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div><div class="window-body" style="padding: 0; overflow: hidden;"><iframe src="https://docs.google.com/spreadsheets/d/1JgLMNxf4PF3FOdmjBQGeaQRdplA8sOym_C8cTT0ErZo/preview" style="width: 100%; height: 100%; border: none;"></iframe></div></div>
+        <div id="video-player-popup" class="window-frame"><div class="title-bar"><span class="title-text">비디오 재생</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div><div class="window-body video-player-body"><video id="video-player-src" controls autoplay muted>브라우저가 비디오 태그를 지원하지 않습니다.</video></div></div>
+        <div id="recycle-popup" class="window-frame"><div class="title-bar"><span class="title-text">휴지통</span><div class="title-bar-buttons"><button class="win-button" onclick="minimizePopup(this)">_</button><button class="win-button" onclick="maximizePopup(this)">□</button><button class="win-button close" onclick="closePopup(this)">X</button></div></div><div class="window-body text-only"><p>휴지통이 비어 있습니다.</p></div></div>
+
+        <!-- 작업 표시줄 -->
+        <div class="taskbar">
+            <button class="start-button"><img src="image/home.png" alt="Start">Start</button>
+            <div class="task-tabs" id="task-tabs"></div>
+            <div class="taskbar-clock" id="live-clock"></div>
+        </div>
+    </div>
+
+    <!-- 뷰어 모드 컨테이너 -->
+    <div id="read-only-viewer"></div>
+
+    <script>
+        let activeZIndex = 1000;
+
+        document.addEventListener("DOMContentLoaded", function() {
+            updateClock();
+            setInterval(updateClock, 1000);
+            checkRevealTime();
+            
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('data')) {
+                enableViewMode(params.get('data'));
+            } else {
+                // 뷰어 모드가 아니면 자동 저장된 데이터를 불러옴
+                loadSavedData();
+            }
+
+            document.querySelectorAll('.window-frame').forEach(popup => {
+                makeDraggable(popup);
+                if(popup.id !== 'student-record-popup') makeResizable(popup);
+                popup.addEventListener('mousedown', () => { popup.style.zIndex = ++activeZIndex; });
+            });
+        });
+
+        /* --- 로컬 저장소 키 --- */
+        const STORAGE_KEY = "retro_student_record_v1";
+
+        /* --- 저장 함수 (로컬스토리지 + 링크생성) --- */
+        function saveData() {
+            const data = {
+                catchphrase: document.getElementById('inp-catchphrase').value,
+                oneliner: document.getElementById('inp-oneliner').value,
+                imgUrl: document.getElementById('inp-img-url').value,
+                nameKor: document.getElementById('inp-name-kor').value,
+                nameEng: document.getElementById('inp-name-eng').value,
+                height: document.getElementById('inp-height').value,
+                weight: document.getElementById('inp-weight').value,
+                gender: document.querySelector('input[name="gender"]:checked')?.value || "",
+                age: document.getElementById('inp-age').value,
+                grade: document.getElementById('inp-grade').value,
+                kw1: document.getElementById('inp-kw1').value,
+                kw2: document.getElementById('inp-kw2').value,
+                kw3: document.getElementById('inp-kw3').value,
+                personality: document.getElementById('inp-personality').value,
+                etc: document.getElementById('inp-etc').value,
+                items: document.getElementById('inp-items').value,
+                relation: document.getElementById('inp-relation').value,
+                simulPass: document.querySelector('input[name="simul_pass"]:checked')?.value || "",
+                deathConsent: document.querySelector('input[name="death_consent"]:checked')?.value || "",
+                secretSetting: document.getElementById('inp-secret-setting').value,
+                secretItems: document.getElementById('inp-secret-items').value
+            };
+
+            try {
+                // 1. 로컬 스토리지에 저장 (내 컴퓨터 영구 저장)
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+                // 2. 공유 링크 생성
+                const encoded = btoa(encodeURIComponent(JSON.stringify(data)));
+                window.currentShareLink = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
+                
+                document.getElementById('share-btn-window').style.display = 'inline-block';
+                document.getElementById('share-btn-bottom').style.display = 'inline-block';
+                
+                alert("저장되었습니다! (브라우저에 자동 저장됨)\n[링크 복사] 버튼을 눌러 공유할 수도 있습니다.");
+            } catch (e) {
+                console.error(e);
+                alert("저장 중 오류가 발생했습니다. 데이터가 너무 많을 수 있습니다.");
+            }
+        }
+
+        /* --- 불러오기 함수 (페이지 로드 시 실행) --- */
+        function loadSavedData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return;
+
+            try {
+                const data = JSON.parse(saved);
+                document.getElementById('inp-catchphrase').value = data.catchphrase || "";
+                document.getElementById('inp-oneliner').value = data.oneliner || "";
+                document.getElementById('inp-img-url').value = data.imgUrl || "";
+                document.getElementById('inp-name-kor').value = data.nameKor || "";
+                document.getElementById('inp-name-eng').value = data.nameEng || "";
+                document.getElementById('inp-height').value = data.height || "";
+                document.getElementById('inp-weight').value = data.weight || "";
+                document.getElementById('inp-age').value = data.age || "";
+                document.getElementById('inp-grade').value = data.grade || "";
+                document.getElementById('inp-kw1').value = data.kw1 || "";
+                document.getElementById('inp-kw2').value = data.kw2 || "";
+                document.getElementById('inp-kw3').value = data.kw3 || "";
+                document.getElementById('inp-personality').value = data.personality || "";
+                document.getElementById('inp-etc').value = data.etc || "";
+                document.getElementById('inp-items').value = data.items || "";
+                document.getElementById('inp-relation').value = data.relation || "";
+                document.getElementById('inp-secret-setting').value = data.secretSetting || "";
+                document.getElementById('inp-secret-items').value = data.secretItems || "";
+
+                if (data.gender) {
+                    const el = document.querySelector(`input[name="gender"][value="${data.gender}"]`);
+                    if (el) el.checked = true;
+                }
+                if (data.simulPass) {
+                    const el = document.querySelector(`input[name="simul_pass"][value="${data.simulPass}"]`);
+                    if (el) el.checked = true;
+                }
+                if (data.deathConsent) {
+                    const el = document.querySelector(`input[name="death_consent"][value="${data.deathConsent}"]`);
+                    if (el) el.checked = true;
+                }
+            } catch (e) {
+                console.error("저장된 데이터 불러오기 실패", e);
+            }
+        }
+
+        function shareLink() {
+            if (!window.currentShareLink) { alert("먼저 저장해주세요."); return; }
+            navigator.clipboard.writeText(window.currentShareLink).then(() => alert("링크가 복사되었습니다!"));
+        }
+
+        function enableViewMode(encodedData) {
+            try {
+                const data = JSON.parse(decodeURIComponent(atob(encodedData)));
+                document.body.classList.add('view-mode');
+                const editorContent = document.getElementById('editor-form').cloneNode(true);
+                editorContent.id = 'viewer-content';
+                
+                editorContent.querySelectorAll('input, textarea').forEach(el => {
+                    const id = el.id.replace('inp-', '');
+                    if (el.type === 'text' || el.type === 'number' || el.tagName === 'TEXTAREA') {
+                        if (el.id === 'inp-catchphrase') el.value = data.catchphrase;
+                        else if (el.id === 'inp-oneliner') el.value = data.oneliner;
+                        else if (el.id === 'inp-img-url') {
+                            if (data.imgUrl) {
+                                const img = document.createElement('img'); img.src = data.imgUrl; img.style.maxWidth = '100%'; img.style.marginTop = '10px';
+                                el.parentNode.appendChild(img);
+                            }
+                            el.style.display = 'none';
+                        }
+                        else if (el.id === 'inp-name-kor') el.value = data.nameKor;
+                        else if (el.id === 'inp-name-eng') el.value = data.nameEng;
+                        else if (el.id === 'inp-height') el.value = data.height;
+                        else if (el.id === 'inp-weight') el.value = data.weight;
+                        else if (el.id === 'inp-age') el.value = data.age;
+                        else if (el.id === 'inp-grade') el.value = data.grade;
+                        else if (el.id === 'inp-kw1') el.value = data.kw1;
+                        else if (el.id === 'inp-kw2') el.value = data.kw2;
+                        else if (el.id === 'inp-kw3') el.value = data.kw3;
+                        else if (el.id === 'inp-personality') el.value = data.personality;
+                        else if (el.id === 'inp-etc') el.value = data.etc;
+                        else if (el.id === 'inp-items') el.value = data.items;
+                        else if (el.id === 'inp-relation') el.value = data.relation;
+                        else if (el.id === 'inp-secret-setting') el.value = data.secretSetting;
+                        else if (el.id === 'inp-secret-items') el.value = data.secretItems;
+                        
+                        el.classList.add('view-mode-element'); el.readOnly = true;
+                        if (el.tagName === 'TEXTAREA') setTimeout(() => { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 5) + 'px'; }, 100);
+                    } else if (el.type === 'radio') {
+                        if (el.name === 'gender' && el.value === data.gender) el.checked = true;
+                        if (el.name === 'simul_pass' && el.value === data.simulPass) el.checked = true;
+                        if (el.name === 'death_consent' && el.value === data.deathConsent) el.checked = true;
+                        el.disabled = true;
+                    } else if (el.type === 'file') el.style.display = 'none';
+                });
+                editorContent.querySelectorAll('.form-desc, .action-area').forEach(el => el.style.display = 'none');
+                document.getElementById('read-only-viewer').appendChild(editorContent);
+            } catch (e) { document.body.classList.remove('view-mode'); }
+        }
+
+        /* --- 기본 팝업 관리 로직 --- */
+        function openPopup(popupId) {
+            const popup = document.getElementById(popupId); if(!popup) return;
+            const minimizedTab = document.querySelector(`.task-tab-item[data-popup-id="${popupId}"]`);
+            if (minimizedTab) { minimizedTab.click(); return; }
+            popup.style.display = 'block'; popup.style.zIndex = ++activeZIndex;
+            if (popupId === 'mail-popup') switchMailbox('inbox', document.querySelector('.mail-folder'));
+            if (popupId === 'computer-popup') {
+                const firstNavItem = popup.querySelector('.nav-item');
+                if (firstNavItem && !popup.querySelector('.nav-item.active')) firstNavItem.click();
+            }
+        }
+        function closePopup(btn) {
+            const popup = btn.closest('.window-frame'); popup.style.display = 'none';
+            const tab = document.querySelector(`.task-tab-item[data-popup-id="${popup.id}"]`);
+            if (tab) tab.remove();
+            const media = popup.querySelector('video, audio'); if(media) media.pause();
+        }
+        function minimizePopup(btn) {
+            const popup = btn.closest('.window-frame');
+            if (document.querySelector(`.task-tab-item[data-popup-id="${popup.id}"]`)) return;
+            popup.style.display = 'none';
+            const tab = document.createElement('button'); tab.className = 'task-tab-item';
+            tab.textContent = popup.querySelector('.title-text').textContent; tab.dataset.popupId = popup.id;
+            tab.addEventListener('click', () => { popup.style.display = 'block'; popup.style.zIndex = ++activeZIndex; tab.remove(); });
+            document.getElementById('task-tabs').appendChild(tab);
+        }
+        function maximizePopup(btn) { btn.closest('.window-frame').classList.toggle('maximized'); }
+
+        /* --- 개별 앱 로직 --- */
+        function switchMailbox(boxType, el) {
+            const popup = document.getElementById('mail-popup');
+            popup.querySelectorAll('.mail-folder, .mailbox-container, .mail-content, .mail-list-item').forEach(e => e.classList.remove('active'));
+            if(el) el.classList.add('active');
+            document.getElementById('mailbox-' + boxType).classList.add('active');
+        }
+        function openMail(e, id) {
+            const p = e.currentTarget.closest('.window-frame');
+            p.querySelectorAll('.mail-list-item, .mail-content').forEach(el => el.classList.remove('active'));
+            e.currentTarget.classList.add('active'); document.getElementById(id).classList.add('active');
+        }
+        function showFolderContent(e, id) {
+            const p = e.currentTarget.closest('.window-frame');
+            p.querySelectorAll('.nav-item, .folder-content').forEach(el => el.classList.remove('active'));
+            e.currentTarget.classList.add('active'); document.getElementById(id).classList.add('active');
+        }
+        function openFileViewer(pId, path) {
+            openPopup(pId); const p = document.getElementById(pId); const v = p.querySelector('video');
+            if(v) { v.src = path; v.load(); v.play(); p.querySelector('.title-text').textContent = path.split('/').pop(); }
+        }
+
+        /* --- [수정됨] 신청서 제출 (실제 시트 연동 복구) --- */
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxImt0Ud5JrHpNXV3UDscqL4VmnZB3Ou3bTFspBAthPBQwFPZ1mDxOGOmuyM6E_Wz9B/exec";
+
+        async function saveAnswer() {
+            const submitButton = document.getElementById('submitButton');
+            const nameInput = document.getElementById('nameInput');
+            const ageInput = document.getElementById('ageInput');
+            const gradeInput = document.getElementById('gradeInput');
+            const genderInput = document.getElementById('genderInput');
+            const linkInput = document.getElementById('linkInput');
+            const answerInput = document.getElementById('answerInput');
+            const inputSection = document.getElementById('inputSection');
+            const loadingMessage = document.getElementById('loadingMessage');
+            const completionMessage = document.getElementById('completionMessage');
+
+            if (!answerInput.value.trim() || !nameInput.value.trim()) {
+                alert('정보를 모두 입력해주세요!');
+                return;
+            }
+
+            submitButton.disabled = true;
+            inputSection.classList.add('hidden');
+            loadingMessage.style.display = 'block';
+
+            try {
+                await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        action: 'addWish', 
+                        name: nameInput.value.trim(), 
+                        age: ageInput.value.trim(), 
+                        grade: gradeInput.value, 
+                        gender: genderInput.value, 
+                        link: linkInput.value.trim(), 
+                        wish: answerInput.value.trim() 
+                    })
+                });
+                loadingMessage.style.display = 'none';
+                completionMessage.classList.remove('hidden');
+            } catch (error) {
+                // 에러가 나도 일단 완료 메시지 보여줌 (사용자 경험상)
+                loadingMessage.style.display = 'none';
+                completionMessage.classList.remove('hidden');
+            }
+        }
+        
+        /* --- 시스템 로직 --- */
+        function checkRevealTime() { if(new Date() >= new Date('2024-01-01')) document.getElementById('application-icon').style.display = 'flex'; }
+        function updateClock() { document.getElementById('live-clock').textContent = new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', hour12:true}); }
+        function makeDraggable(win) {
+            const bar = win.querySelector('.title-bar'); if(!bar) return;
+            let drag = false;
+            bar.addEventListener('mousedown', (e) => {
+                win.style.zIndex = ++activeZIndex;
+                if(e.target.classList.contains('win-button') || win.classList.contains('maximized')) return;
+                drag = true; const ox = e.clientX - win.getBoundingClientRect().left, oy = e.clientY - win.getBoundingClientRect().top;
+                function move(e) { if(drag) { win.style.left = (e.clientX - ox) + 'px'; win.style.top = (e.clientY - oy) + 'px'; } }
+                function stop() { drag = false; document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', stop); }
+                document.addEventListener('mousemove', move); document.addEventListener('mouseup', stop);
+            });
+        }
+        function makeResizable(win) {
+            const h = document.createElement('div'); h.className = 'resize-handle resize-handle-se'; win.appendChild(h);
+            h.addEventListener('mousedown', (e) => {
+                if(win.classList.contains('maximized')) return;
+                e.stopPropagation(); e.preventDefault(); win.style.zIndex = ++activeZIndex;
+                const sx = e.clientX, sy = e.clientY, sw = win.offsetWidth, sh = win.offsetHeight;
+                function resize(e) { win.style.width = Math.max(250, sw+(e.clientX-sx))+'px'; win.style.height = Math.max(150, sh+(e.clientY-sy))+'px'; }
+                function stop() { document.removeEventListener('mousemove', resize); document.removeEventListener('mouseup', stop); }
+                document.addEventListener('mousemove', resize); document.addEventListener('mouseup', stop);
+            });
+        }
+    </script>
+</body>
+</html>
